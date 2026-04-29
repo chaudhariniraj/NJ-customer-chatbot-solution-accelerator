@@ -64,6 +64,12 @@ export const EnhancedChatPanel = ({
   const audioBufferQueueRef = useRef<string[]>([]);
   const sessionReadyRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  const awaitingResponseRef = useRef(false);
+  const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the current voice turn has already posted the structured tool
+  // result to chat history (via the early `tool_result` event). When true, the
+  // final RESPONSE_DONE transcript skips re-posting to avoid duplicates.
+  const voiceStructuredPostedRef = useRef(false);
 
   isTypingRef.current = isTyping;
   isLoadingRef.current = isLoading;
@@ -307,7 +313,13 @@ export const EnhancedChatPanel = ({
   const stopVoiceSession = async () => {
     setIsVoiceTransitioning(true);
     sessionReadyRef.current = false;
+    awaitingResponseRef.current = false;
+    voiceStructuredPostedRef.current = false;
     audioBufferQueueRef.current = [];
+    if (responseTimeoutRef.current) {
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
+    }
 
     const ws = wsRef.current;
     wsRef.current = null;
@@ -488,30 +500,99 @@ export const EnhancedChatPanel = ({
           setVoiceSessionState('thinking');
           setInputValue('');
           lastSentTranscriptRef.current = transcript;
+          awaitingResponseRef.current = true;
+          voiceStructuredPostedRef.current = false;
 
           // Display user transcript in chat
           onVoiceMessageRef.current?.(transcript, 'user');
+
+          // Timeout: if no assistant response within 30s, show error
+          if (responseTimeoutRef.current) clearTimeout(responseTimeoutRef.current);
+          responseTimeoutRef.current = setTimeout(() => {
+            if (awaitingResponseRef.current) {
+              awaitingResponseRef.current = false;
+              voiceStructuredPostedRef.current = false;
+              setVoiceError('No response received. Please try again.');
+              setStreamingVoiceText('');
+              setVoiceSessionState('idle');
+              const ws = wsRef.current;
+              wsRef.current = null;
+              if (ws) {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'stop_session' }));
+                }
+                if (ws.readyState !== WebSocket.CLOSED) {
+                  ws.close();
+                }
+              }
+            }
+          }, 30_000);
 
           // Auto-stop mic after question captured — prevents feedback
           stopMicrophoneCapture().then(() => setIsVoiceActive(false));
         }
 
         if (message.type === 'audio_data' && message.data) {
+          // Assistant is responding — clear the no-response timeout
+          awaitingResponseRef.current = false;
+          if (responseTimeoutRef.current) {
+            clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+          }
           setVoiceSessionState('speaking');
           isSpeakingRef.current = true;
           playAssistantAudioChunk(message.data, message.sampleRate || 24000);
         }
 
+        // Tool result arrives BEFORE audio playback starts — render product cards
+        // immediately so they appear before the assistant begins speaking.
+        if (message.type === 'tool_result' && typeof message.structuredText === 'string' && message.structuredText.trim()) {
+          // Assistant is responding — clear the no-response timeout
+          awaitingResponseRef.current = false;
+          if (responseTimeoutRef.current) {
+            clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+          }
+          setStreamingVoiceText('');
+          onVoiceMessageRef.current?.(message.structuredText, 'assistant');
+          voiceStructuredPostedRef.current = true;
+        }
+
         // Show intermediate transcript text as it streams in (alongside audio)
         if (message.type === 'transcript' && message.role === 'assistant' && !message.isFinal && message.text) {
+          // Assistant is responding — clear the no-response timeout
+          if (awaitingResponseRef.current) {
+            awaitingResponseRef.current = false;
+            if (responseTimeoutRef.current) {
+              clearTimeout(responseTimeoutRef.current);
+              responseTimeoutRef.current = null;
+            }
+          }
           setStreamingVoiceText(message.text);
         }
 
         if (message.type === 'transcript' && message.role === 'assistant' && message.isFinal && message.text) {
+          // Response received — clear timeout and flag
+          awaitingResponseRef.current = false;
+          if (responseTimeoutRef.current) {
+            clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+          }
+
           // Clear streaming text and add the final message to chat history
           setStreamingVoiceText('');
-          const displayText = message.text;
-          onVoiceMessageRef.current?.(displayText, 'assistant');
+          // If the structured tool result was already posted via the earlier
+          // `tool_result` event, skip re-posting on RESPONSE_DONE. Otherwise prefer
+          // structuredText (Foundry markdown for product cards) over the spoken
+          // paraphrase so cards render the same way as the text-chat path.
+          if (!voiceStructuredPostedRef.current) {
+            const displayText =
+              (typeof message.structuredText === 'string' && message.structuredText.trim())
+                ? message.structuredText
+                : message.text;
+            onVoiceMessageRef.current?.(displayText, 'assistant');
+          }
+          voiceStructuredPostedRef.current = false;
           setVoiceSessionState('idle');
           isSpeakingRef.current = false;
 
@@ -570,6 +651,18 @@ export const EnhancedChatPanel = ({
     };
 
     ws.onclose = async () => {
+      // If we were still waiting for an assistant response, the connection
+      // dropped before the answer arrived — notify the user.
+      if (awaitingResponseRef.current) {
+        awaitingResponseRef.current = false;
+        if (responseTimeoutRef.current) {
+          clearTimeout(responseTimeoutRef.current);
+          responseTimeoutRef.current = null;
+        }
+        setVoiceError('Voice connection closed before a response was received. Please try again.');
+      }
+      voiceStructuredPostedRef.current = false;
+      setStreamingVoiceText('');
       await stopMicrophoneCapture();
       setIsVoiceActive(false);
       setVoiceSessionState('idle');
@@ -698,8 +791,8 @@ export const EnhancedChatPanel = ({
               </div>
             ) : (
               <>
-                {/* Welcome Message - Only show when no messages and not loading */}
-                {messages.length === 0 && !isTyping && !isLoading && (
+                {/* Welcome Message - Only show when no messages, not loading, and no active voice session */}
+                {messages.length === 0 && !isTyping && !isLoading && voiceSessionState === 'idle' && !streamingVoiceText && (
               <div className="flex flex-col items-center justify-center text-center space-y-6 h-full min-h-[400px]">
                 {/* AI Assistant Icon */}
                 <img 
@@ -737,15 +830,19 @@ export const EnhancedChatPanel = ({
             );
             })}
             
-            {/* Streaming voice assistant transcript — shown while audio plays */}
+            {/* Streaming voice assistant — show typing indicator instead of paraphrased
+                plain text. The final message arrives with structuredText (markdown) and
+                renders as product cards, so showing the partial text here causes a visible
+                flicker (plain text → cards). The TTS audio provides the spoken feedback. */}
             {streamingVoiceText && (
               <EnhancedChatMessageBubble
                 message={{
                   id: 'voice-streaming',
-                  content: streamingVoiceText,
+                  content: '',
                   sender: 'assistant',
                   timestamp: new Date()
                 }}
+                isTyping={true}
               />
             )}
 

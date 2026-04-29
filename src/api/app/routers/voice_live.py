@@ -380,6 +380,21 @@ class VoiceLiveHandler:
             # Store raw Foundry result so UI shows same content as text chat
             self._last_tool_result = result_text
 
+            # Push structured tool result to UI immediately so product cards render
+            # BEFORE the realtime model starts streaming TTS audio. Without this, the
+            # audio (paraphrase) plays first and cards only appear after RESPONSE_DONE.
+            if result_text:
+                try:
+                    await self.send(
+                        {
+                            "type": "tool_result",
+                            "role": "assistant",
+                            "structuredText": result_text,
+                        }
+                    )
+                except Exception as exc:
+                    logger.debug("[%s] tool_result send failed: %s", self.client_id, exc)
+
             try:
                 from azure.ai.voicelive.models import ConversationRequestItem
                 tool_output = ConversationRequestItem(type="function_call_output")

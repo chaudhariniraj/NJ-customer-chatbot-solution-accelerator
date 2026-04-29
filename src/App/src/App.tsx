@@ -185,20 +185,42 @@ function App() {
 
 
   // Chat functions
-  const handleVoiceMessage = (text: string, role: 'user' | 'assistant') => {
+  const handleVoiceMessage = async (text: string, role: 'user' | 'assistant') => {
+    // Use localStorage fallback to avoid race where React state hasn't
+    // propagated the newly created session ID yet.
+    let sessionId = currentSessionId || getCurrentSessionId();
+
+    // Create a chat session on the first voice message so the prompt is
+    // stored under a real session key and the welcome screen is replaced.
+    if (!sessionId && role === 'user') {
+      try {
+        const sessionData = await createNewChatSession();
+        sessionId = sessionData.session_id;
+        setCurrentSessionId(sessionId);
+        saveCurrentSessionId(sessionId);
+      } catch {
+        toast.error('Failed to start chat session');
+        return;
+      }
+    }
+
+    // Guard: if sessionId is still null (e.g. assistant message arrived
+    // before session was created), skip to avoid writing to ['chat', null].
+    if (!sessionId) {
+      return;
+    }
+
     const msg: ChatMessage = {
       id: `voice-${role}-${Date.now()}`,
       content: text,
       sender: role,
       timestamp: createTimestamp()
     };
-    queryClient.setQueryData(['chat', currentSessionId], (old: ChatMessage[] = []) => [...old, msg]);
+    queryClient.setQueryData(['chat', sessionId], (old: ChatMessage[] = []) => [...old, msg]);
     if (role === 'assistant') {
       setIsTyping(false);
     }
-    if (currentSessionId) {
-      saveVoiceMessage(currentSessionId, text, role);
-    }
+    saveVoiceMessage(sessionId, text, role);
   };
 
   const handleSendMessage = async (content: string) => {
