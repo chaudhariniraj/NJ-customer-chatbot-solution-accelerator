@@ -2,7 +2,7 @@ import { EnhancedChatPanel } from '@/components/EnhancedChatPanel';
 import { ChatMessage, Product } from '@/lib/types';
 import { Button } from '@fluentui/react-components';
 import { Edit20Regular } from '@fluentui/react-icons';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import PanelRight from './PanelRight';
 import PanelRightToolbar from './PanelRightToolbar';
 import eventBus from './eventbus';
@@ -30,6 +30,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   isLoading = false,
   onAddToCart
 }) => {
+  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
   // Sync the panel state with the isOpen prop
   useEffect(() => {
     if (isOpen) {
@@ -55,7 +56,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           onClick={onNewChat || (() => {})}
           aria-label="Start new chat"
           title="Start new chat"
-          disabled={isTyping || isLoading}
+          disabled={isTyping || isLoading || isVoiceProcessing}
         />
       </PanelRightToolbar>
       
@@ -69,6 +70,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
           isOpen={isOpen}
           onClose={onClose || (() => {})}
           onAddToCart={onAddToCart}
+          onVoiceProcessingChange={setIsVoiceProcessing}
           className="h-full"
         />
       </div>

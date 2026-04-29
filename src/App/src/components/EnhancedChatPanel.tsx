@@ -20,6 +20,7 @@ interface EnhancedChatPanelProps {
   onAddToCart?: (product: Product) => void;
   className?: string;
   isLoading?: boolean;
+  onVoiceProcessingChange?: (isProcessing: boolean) => void;
 }
 
 export const EnhancedChatPanel = ({
@@ -32,6 +33,7 @@ export const EnhancedChatPanel = ({
   onAddToCart,
   className,
   isLoading = false,
+  onVoiceProcessingChange,
 }: EnhancedChatPanelProps) => {
   const [inputValue, setInputValue] = useState('');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
@@ -43,6 +45,7 @@ export const EnhancedChatPanel = ({
   const [voiceSessionState, setVoiceSessionState] = useState<'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [isVoiceTransitioning, setIsVoiceTransitioning] = useState(false);
   const [streamingVoiceText, setStreamingVoiceText] = useState('');
+  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +63,7 @@ export const EnhancedChatPanel = ({
   const isLoadingRef = useRef(isLoading);
   const onSendMessageRef = useRef(onSendMessage);
   const onVoiceMessageRef = useRef(onVoiceMessage);
+  const onVoiceProcessingChangeRef = useRef(onVoiceProcessingChange);
   const voiceConfigCacheRef = useRef<any>(null);
   const audioBufferQueueRef = useRef<string[]>([]);
   const sessionReadyRef = useRef(false);
@@ -80,6 +84,7 @@ export const EnhancedChatPanel = ({
   isLoadingRef.current = isLoading;
   onSendMessageRef.current = onSendMessage;
   onVoiceMessageRef.current = onVoiceMessage;
+  onVoiceProcessingChangeRef.current = onVoiceProcessingChange;
   const speakingMessageIdRef = useRef<string | null>(null);
 
   const getVoiceMessageKey = (message: ChatMessage, index: number): string => {
@@ -214,6 +219,13 @@ export const EnhancedChatPanel = ({
       handleSend();
     }
   };
+
+  // Derive voice processing state from voiceSessionState
+  useEffect(() => {
+    const processing = voiceSessionState === 'thinking' || voiceSessionState === 'speaking';
+    setIsVoiceProcessing(processing);
+    onVoiceProcessingChangeRef.current?.(processing);
+  }, [voiceSessionState]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -903,8 +915,8 @@ export const EnhancedChatPanel = ({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            className="pr-16 resize-none min-h-[40px]"
-            disabled={isTyping || isLoading}
+            className="pr-21 resize-none min-h-[40px]"
+            disabled={isTyping || isLoading || isVoiceProcessing}
           />
           <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex gap-1">
             <Button
@@ -933,6 +945,9 @@ export const EnhancedChatPanel = ({
                 !isVoiceEnabled
                 || isVoiceTransitioning
                 || voiceSessionState === 'thinking'
+                || isVoiceProcessing
+                || isTyping 
+                || isLoading
               }
             >
               {isVoiceActive && voiceSessionState === 'listening' && (
@@ -952,7 +967,7 @@ export const EnhancedChatPanel = ({
               className="h-8 w-8 p-0"
               title="Send message"
               onClick={handleSend}
-              disabled={!inputValue.trim() || isTyping || isLoading}
+              disabled={!inputValue.trim() || isTyping || isLoading || isVoiceProcessing}
             >
               <Send20Regular className="h-4 w-4" />
             </Button>
