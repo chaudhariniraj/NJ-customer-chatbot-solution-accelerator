@@ -37,10 +37,10 @@ export const EnhancedChatPanel = ({
 }: EnhancedChatPanelProps) => {
   const [inputValue, setInputValue] = useState('');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [isAgentVoiceEnabled, setIsAgentVoiceEnabled] = useState(false);
+  const [isAgentVoiceEnabled] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
-  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [, setSpeakingMessageId] = useState<string | null>(null);
   const [spokenAssistantIds, setSpokenAssistantIds] = useState<string[]>([]);
   const [voiceSessionState, setVoiceSessionState] = useState<'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [isVoiceTransitioning, setIsVoiceTransitioning] = useState(false);
@@ -275,20 +275,6 @@ export const EnhancedChatPanel = ({
     </svg>
   );
 
-  const SpeakerIcon = () => (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="M3 8H6L10 5V15L6 12H3V8Z" fill="currentColor" />
-      <path d="M13 8.2C13.6 8.7 14 9.5 14 10.4C14 11.3 13.6 12.1 13 12.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M14.8 6.7C15.8 7.6 16.4 8.9 16.4 10.4C16.4 11.9 15.8 13.2 14.8 14.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-
   // Audio conversion functions imported from @/lib/audioUtils
 
   const playAssistantAudioChunk = (base64Data: string, sampleRate = 24000) => {
@@ -361,14 +347,6 @@ export const EnhancedChatPanel = ({
     isSpeakingRef.current = false;
     setIsVoiceTransitioning(false);
     setStreamingVoiceText('');
-  };
-
-  /** Stop listening only — mic stops but let the agent finish responding */
-  const stopListeningOnly = async () => {
-    await stopMicrophoneCapture();
-    setIsVoiceActive(false);
-    setVoiceSessionState('idle');
-    // Keep WebSocket open so agent response can still come through
   };
 
   const startMicrophoneCapture = async () => {

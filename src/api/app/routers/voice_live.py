@@ -167,14 +167,19 @@ class VoiceLiveHandler:
             self._event_task.cancel()
             try:
                 await self._event_task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
+                # Cancellation is expected during shutdown; ignore.
                 pass
+            except Exception as exc:
+                # Non-cancellation errors are non-fatal during shutdown but logged
+                # for diagnostics.
+                logger.debug("[%s] Error while awaiting event task during stop: %s", self.client_id, exc)
         self.connection = None
         close_fn = getattr(self.credential, "close", None)
         if callable(close_fn):
-            result = close_fn()
-            if asyncio.iscoroutine(result):
-                await result
+            close_result = close_fn()
+            if asyncio.iscoroutine(close_result):
+                await close_result
 
     async def _run(self) -> None:
         try:
@@ -318,8 +323,9 @@ class VoiceLiveHandler:
             if not self._native_agent:
                 try:
                     await connection.response.cancel()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    # Best-effort cancellation; failure is non-fatal but logged for diagnostics.
+                    logger.debug("[%s] Failed to cancel existing response: %s", self.client_id, exc)
 
         elif event_type == ServerEventType.INPUT_AUDIO_BUFFER_SPEECH_STOPPED.value:
             if self._is_processing:
@@ -367,8 +373,10 @@ class VoiceLiveHandler:
                         if not agent_task.done():
                             try:
                                 await self.send({"type": "status", "state": "thinking"})
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                # Keep-alive send failures are non-fatal; the underlying
+                                # tool execution continues regardless.
+                                logger.debug("[%s] Keep-alive status send failed: %s", self.client_id, exc)
                     result_text = agent_task.result()
                 else:
                     result_text = f"Unknown function: {name}"
@@ -601,9 +609,9 @@ async def text_to_speech(request: Request):
     finally:
         close_fn = getattr(credential, "close", None)
         if callable(close_fn):
-            result = close_fn()
-            if asyncio.iscoroutine(result):
-                await result
+            close_result = close_fn()
+            if asyncio.iscoroutine(close_result):
+                await close_result
 
     if not audio_chunks:
         return Response(status_code=500, content="No audio generated")
