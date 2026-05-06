@@ -25,7 +25,7 @@ param solutionUniqueText string = take(uniqueString(subscription().id, resourceG
 param location string
 
 // Restricting deployment to regions that support all deployed models: gpt-4o-mini, text-embedding-3-small, and gpt-realtime-mini (GlobalStandard)
-@allowed(['centralus', 'eastus2', 'francecentral', 'swedencentral'])
+@allowed(['eastus2', 'francecentral', 'swedencentral'])
 @metadata({
   azd:{
     type: 'location'
@@ -613,6 +613,7 @@ var privateDnsZones = [
   'privatelink.services.ai.azure.com'
   'privatelink.documents.azure.com'
   'privatelink.search.windows.net'
+  'privatelink.azurewebsites.net'
 ]
 
 // DNS Zone Index Constants
@@ -622,6 +623,7 @@ var dnsZoneIndex = {
   aiServices: 2
   cosmosDb: 3
   search: 4
+  webApp: 5
 }
 
 // List of DNS zone indices that correspond to AI-related services.
@@ -1180,7 +1182,22 @@ module webSiteBackend 'modules/web-sites.bicep' = {
       imagePullTraffic: enablePrivateNetworking ? true : false
     }
     virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : null
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: enablePrivateNetworking ? 'Disabled' : 'Enabled'
+    privateEndpoints: enablePrivateNetworking
+      ? [
+          {
+            name: 'pep-${backendWebSiteResourceName}'
+            customNetworkInterfaceName: 'nic-${backendWebSiteResourceName}'
+            privateDnsZoneGroup: {
+              privateDnsZoneGroupConfigs: [
+                { privateDnsZoneResourceId: avmPrivateDnsZones[dnsZoneIndex.webApp]!.outputs.resourceId }
+              ]
+            }
+            service: 'sites'
+            subnetResourceId: virtualNetwork!.outputs.backendSubnetResourceId
+          }
+        ]
+      : []
   }
 }
 
@@ -1298,7 +1315,8 @@ module webSite 'modules/web-sites.bicep' = {
         name: 'appsettings'
         properties: {
           NODE_ENV: 'production'
-          VITE_API_BASE_URL: 'https://${webSiteBackend.outputs.defaultHostname}'
+          VITE_API_BASE_URL: enablePrivateNetworking ? '' : 'https://${webSiteBackend.outputs.defaultHostname}'
+          BACKEND_API_URL: enablePrivateNetworking ? 'https://${webSiteBackend.outputs.defaultHostname}' : ''
         }
         // WAF aligned configuration for Monitoring
         applicationInsightResourceId: enableMonitoring ? applicationInsights!.outputs.resourceId : null
