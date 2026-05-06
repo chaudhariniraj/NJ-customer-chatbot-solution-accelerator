@@ -473,12 +473,9 @@ cd src/tests
 
 # Run all tests (coverage is configured via pytest.ini)
 python -m pytest
-
-# Run with verbose output only
-python -m pytest -v
 ```
 
-> **Note**: Tests must be run from the `src/tests/` directory. The `pytest.ini` there configures coverage against `../api/app` automatically — do not run pytest from the repository root or `src/api/`.
+> **Note**: Tests must be run from the `src/tests/` directory. The `pytest.ini` there configures coverage against `../api/app` and already enables verbose output (`-v`) — do not run pytest from the repository root or `src/api/`.
 
 ---
 

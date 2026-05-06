@@ -32,5 +32,15 @@ echo "Frontend: http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop both services"
 
+# Trap SIGINT/SIGTERM to kill both background processes on exit
+cleanup() {
+  echo ""
+  echo "Stopping services..."
+  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null
+  wait "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null
+  exit 0
+}
+trap cleanup INT TERM
+
 # Wait for user to stop
 wait "$BACKEND_PID" "$FRONTEND_PID"
