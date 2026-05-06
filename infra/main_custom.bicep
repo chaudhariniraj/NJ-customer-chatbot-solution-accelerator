@@ -25,7 +25,7 @@ param solutionUniqueText string = take(uniqueString(subscription().id, resourceG
 param location string
 
 // Restricting deployment to regions that support all deployed models: gpt-4o-mini, text-embedding-3-small, and gpt-realtime-mini (GlobalStandard)
-@allowed(['centralus', 'eastus2', 'francecentral', 'swedencentral'])
+@allowed(['eastus2', 'francecentral', 'swedencentral'])
 @metadata({
   azd:{
     type: 'location'
