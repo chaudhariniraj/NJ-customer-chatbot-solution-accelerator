@@ -8,7 +8,7 @@ import { addToCart, checkoutCart, clearCurrentSessionId, createNewChatSession, c
 import { filterProducts, sortProducts } from '@/lib/data';
 import { ChatMessage, Product, SortBy } from '@/lib/types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 function App() {
@@ -185,20 +185,54 @@ function App() {
 
 
   // Chat functions
+
+  // Serialise voice message handling so the user message (including session
+  // creation and its DB save) always completes before the assistant message
+  // is processed. Without this, the two fire-and-forget calls from the
+  // WebSocket handler race and the assistant save can reach the server first,
+  // causing wrong message order in the DB and in the UI after a refetch.
+  const voiceMessageQueueRef = useRef<Promise<void>>(Promise.resolve());
+
   const handleVoiceMessage = (text: string, role: 'user' | 'assistant') => {
-    const msg: ChatMessage = {
-      id: `voice-${role}-${Date.now()}`,
-      content: text,
-      sender: role,
-      timestamp: createTimestamp()
-    };
-    queryClient.setQueryData(['chat', currentSessionId], (old: ChatMessage[] = []) => [...old, msg]);
-    if (role === 'assistant') {
-      setIsTyping(false);
-    }
-    if (currentSessionId) {
-      saveVoiceMessage(currentSessionId, text, role);
-    }
+    voiceMessageQueueRef.current = voiceMessageQueueRef.current
+      .catch(() => { /* don't let a failed save block the queue */ })
+      .then(async () => {
+        // Use localStorage fallback to avoid race where React state hasn't
+        // propagated the newly created session ID yet.
+        let sessionId = currentSessionId || getCurrentSessionId();
+
+        // Create a chat session on the first voice message so the prompt is
+        // stored under a real session key and the welcome screen is replaced.
+        if (!sessionId && role === 'user') {
+          try {
+            const sessionData = await createNewChatSession();
+            sessionId = sessionData.session_id;
+            setCurrentSessionId(sessionId);
+            saveCurrentSessionId(sessionId);
+          } catch {
+            toast.error('Failed to start chat session');
+            return;
+          }
+        }
+
+        // Guard: if sessionId is still null (e.g. assistant message arrived
+        // before session was created), skip to avoid writing to ['chat', null].
+        if (!sessionId) {
+          return;
+        }
+
+        const msg: ChatMessage = {
+          id: `voice-${role}-${Date.now()}`,
+          content: text,
+          sender: role,
+          timestamp: createTimestamp()
+        };
+        queryClient.setQueryData(['chat', sessionId], (old: ChatMessage[] = []) => [...old, msg]);
+        if (role === 'assistant') {
+          setIsTyping(false);
+        }
+        await saveVoiceMessage(sessionId, text, role);
+      });
   };
 
   const handleSendMessage = async (content: string) => {

@@ -1,8 +1,6 @@
 """
 Tests for app.utils.voice_utils — voice utility functions.
 """
-from unittest.mock import MagicMock
-
 import pytest
 from app.utils.voice_utils import (
     clean_text_for_speech,
