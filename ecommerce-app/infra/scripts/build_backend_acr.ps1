@@ -25,9 +25,13 @@ $appRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $ctx = Join-Path $appRoot 'backend'
 
 $imageRef = "${Repository}:${ImageTag}"
-Write-Host "az acr build --registry $Registry --image $imageRef --file Dockerfile --platform linux $ctx"
-
-az acr build --registry $Registry --image $imageRef --file Dockerfile --platform linux $ctx
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Push-Location -LiteralPath $ctx
+try {
+    Write-Host "az acr build --registry $Registry --image $imageRef --file Dockerfile --platform linux ."
+    az acr build --registry $Registry --image $imageRef --file Dockerfile --platform linux .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} finally {
+    Pop-Location
+}
 
 Write-Host "Set AZURE_ENV_IMAGETAG=$ImageTag (and AZURE_ENV_BACKEND_IMAGE_REPO=$Repository if non-default) then azd provision or update the API web app."

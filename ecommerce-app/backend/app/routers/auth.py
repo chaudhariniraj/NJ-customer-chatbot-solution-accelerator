@@ -134,7 +134,7 @@ async def get_customer_profile(current_user: Dict[str, Any] = Depends(get_curren
             raise HTTPException(status_code=404, detail="Customer profile not found")
 
         # Get recent orders
-        orders = await get_db_service().get_customer_orders(user_id, limit=10)
+        orders = await get_db_service().get_customer_orders(user_id, page_size=10)
 
         return {
             "customer": customer,

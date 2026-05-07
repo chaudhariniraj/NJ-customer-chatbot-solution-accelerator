@@ -9,7 +9,6 @@ from azure.cosmos.exceptions import CosmosResourceNotFoundError
 # Handle both relative and absolute imports
 try:
     from .config import settings
-    from .database import DatabaseService
     from .models import (
         Cart,
         ChatMessage,
@@ -34,7 +33,6 @@ except ImportError:
 
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from app.config import settings
-    from app.database import DatabaseService
     from app.models import (
         Cart,
         ChatMessage,
@@ -65,7 +63,7 @@ def _prepare_query_parameters(params: List[Dict[str, Any]]) -> List[Dict[str, ob
     return [{"name": p["name"], "value": p["value"]} for p in params]
 
 
-class CosmosDatabaseService(DatabaseService):
+class CosmosDatabaseService:
     """Cosmos DB implementation of the database service"""
 
     def __init__(self):
@@ -1444,7 +1442,8 @@ Original error: {error_msg}
             raise
 
 
-# Global service instance - lazy initialization
+EcommerceCosmosService = CosmosDatabaseService
+
 cosmos_service = None
 
 

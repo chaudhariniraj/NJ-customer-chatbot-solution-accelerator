@@ -122,7 +122,7 @@ var acrResourceName = toLower(replace('${abbrs.containers.containerRegistry}${so
 
 var deployingUserPrincipalId = deployer().objectId
 
-var acrPullRoleDefinitionResourceId = '/subscriptions/${subscription().subscriptionId}/providers/Microsoft.Authorization/roleDefinitions/7dfe214f-a023-46bf-bd83-e861793bfb76'
+var acrPullRoleDefinitionResourceId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 
 // ========== Resource Group Tag ========== //
 resource resourceGroupTags 'Microsoft.Resources/tags@2025-04-01' = {
@@ -257,7 +257,7 @@ module chat_backend_docker 'deploy_backend_docker.bicep' = {
       DUMMY_TEST: 'True'
       SOLUTION_NAME: solutionPrefix
       APP_ENV: 'Prod'
-      ALLOWED_ORIGINS_STR: 'https://${chatFeWebAppName}.azurewebsites.net,*'
+      ALLOWED_ORIGINS_STR: 'https://${chatFeWebAppName}.azurewebsites.net'
       AZURE_FOUNDRY_ENDPOINT: aifoundry.outputs.projectEndpoint
       AZURE_SEARCH_ENDPOINT: aifoundry.outputs.aiSearchTarget
       AZURE_SEARCH_INDEX: 'policies'
@@ -321,7 +321,7 @@ module ecommerce_backend_docker 'deploy_backend_docker.bicep' = {
       DUMMY_TEST: 'True'
       SOLUTION_NAME: solutionPrefix
       APP_ENV: 'Prod'
-      ALLOWED_ORIGINS_STR: 'https://${ecomFeWebAppName}.azurewebsites.net,*'
+      ALLOWED_ORIGINS_STR: 'https://${ecomFeWebAppName}.azurewebsites.net'
       AZURE_FOUNDRY_ENDPOINT: aifoundry.outputs.projectEndpoint
       AZURE_SEARCH_ENDPOINT: aifoundry.outputs.aiSearchTarget
       AZURE_SEARCH_INDEX: 'policies'

@@ -132,11 +132,11 @@ def get_database_service() -> EcommerceDatabaseService:
                 from cosmos_service import EcommerceCosmosService
             return EcommerceCosmosService()
         except ImportError:
-            print("⚠️ Cosmos DB dependencies not found, falling back to in-memory service")
+            print("Cosmos DB dependencies not found, falling back to in-memory service")
             from .memory_service import EcommerceMemoryService
             return EcommerceMemoryService()
     else:
-        print("📝 No Cosmos DB configuration found, using in-memory service")
+        print("No Cosmos DB configuration found, using in-memory service")
         from .memory_service import EcommerceMemoryService
         return EcommerceMemoryService()
 

@@ -6,13 +6,28 @@ import sys
 from pathlib import Path
 
 import uvicorn
-from azure.monitor.opentelemetry import configure_azure_monitor
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+try:
+    from opentelemetry import trace
+except ImportError:
+
+    class _Trace:
+        @staticmethod
+        def get_current_span():
+            return None
+
+    trace = _Trace()
+
+try:
+    from azure.monitor.opentelemetry import configure_azure_monitor
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+except ImportError:
+    configure_azure_monitor = None
+    FastAPIInstrumentor = None
 
 _env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(_env_path, override=False)
@@ -73,7 +88,11 @@ app = FastAPI(
 )
 
 instrumentation_key = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
-if instrumentation_key:
+if (
+    instrumentation_key
+    and configure_azure_monitor is not None
+    and FastAPIInstrumentor is not None
+):
     configure_azure_monitor(
         connection_string=instrumentation_key,
         enable_live_metrics=False,
@@ -89,6 +108,14 @@ if instrumentation_key:
     )
     logging.info(
         "Application Insights configured with FastAPI instrumentation"
+    )
+elif instrumentation_key and (
+    configure_azure_monitor is None or FastAPIInstrumentor is None
+):
+    logging.warning(
+        "Application Insights connection string is set but OpenTelemetry "
+        "packages are missing; install azure-monitor-opentelemetry to enable "
+        "telemetry."
     )
 else:
     logging.warning(

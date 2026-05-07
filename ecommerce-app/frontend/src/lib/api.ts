@@ -1,11 +1,15 @@
 import axios from 'axios';
 
 export const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__?.VITE_API_BASE_URL) {
-    return (window as any).__RUNTIME_CONFIG__.VITE_API_BASE_URL;
+  if (typeof window !== 'undefined') {
+    const fromRuntime = String(
+      (window as any).__RUNTIME_CONFIG__?.VITE_API_BASE_URL ?? ''
+    ).trim();
+    if (fromRuntime) return fromRuntime;
   }
-
-  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const fromBuild = String(import.meta.env.VITE_API_BASE_URL ?? '').trim();
+  if (fromBuild) return fromBuild;
+  return import.meta.env.DEV ? 'http://localhost:8000' : '';
 };
 
 const API_BASE_URL = getApiBaseUrl();

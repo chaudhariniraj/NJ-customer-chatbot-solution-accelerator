@@ -3,7 +3,12 @@ import os
 import sys
 
 import uvicorn
-from azure.monitor.opentelemetry import configure_azure_monitor
+
+try:
+    from azure.monitor.opentelemetry import configure_azure_monitor
+except ImportError:
+    configure_azure_monitor = None
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -38,12 +43,15 @@ logger = logging.getLogger(__name__)
 
 # Check if the Application Insights Instrumentation Key is set in the environment variables
 instrumentation_key = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
-if instrumentation_key:
-    # Configure Application Insights if the Instrumentation Key is found
+if instrumentation_key and configure_azure_monitor is not None:
     configure_azure_monitor(connection_string=instrumentation_key)
     logging.info("Application Insights configured with the provided Instrumentation Key")
+elif instrumentation_key and configure_azure_monitor is None:
+    logging.warning(
+        "APPLICATIONINSIGHTS_CONNECTION_STRING is set but azure-monitor-opentelemetry "
+        "is not installed; telemetry disabled."
+    )
 else:
-    # Log a warning if the Instrumentation Key is not found
     logging.warning("No Application Insights Instrumentation Key found. Skipping configuration")
 
 # Create FastAPI app
