@@ -1,126 +1,138 @@
-# Customer chatbot: product roadmap (unified accelerator to embeddable widget)
+# Product roadmap — from one chatbot to a split fleet, then a drop-in widget
 
-Readable milestone view from the **single** accelerator through **split apps**, then an **embeddable chat widget** reusable beyond ecommerce.
+This is the **friendly version**: where we came from, what’s actually done, and where we’re going—without jargon-y phase codes. Dig into details anytime in **[`src/separationPlan.md`](../src/separationPlan.md)** (infra and validation) and **[embeddable-chat-widget-technical-plan.md](embeddable-chat-widget-technical-plan.md)** (how we’d technically build the embeddable bubble).
 
-| Doc | Purpose |
-|-----|---------|
-| [src/separationPlan.md](../src/separationPlan.md) | Separation architecture, infra, validation |
-| [embeddable-chat-widget-technical-plan.md](embeddable-chat-widget-technical-plan.md) | Widget engineering (iframe, CORS, build targets) |
+---
 
-## High-level timeline
+## The story in one picture
+
+Think of this as leveling up:
+
+1. **One big showroom** — a single accelerator where shopping and chat lived together.
+2. **Two sibling apps** — shop on one hostname, support chat on another, same family of Azure resources underneath.
+3. **A tidy launch routine** — one `azd` story that spins up containers and rebuilds images so nobody’s silently talking to localhost in production.
+4. **Proof that it really works** — data in Search/Cosmos, agents happy, clicks and carts tested for real.
+5. **Same chat powers, postage-stamp sized** — a widget you can glue onto the shop first, then onto *anyone’s* website later.
+
+---
+
+## Milestones — with honest checkmarks
+
+Legend: **✅ done (as of this roadmap refresh)** · **🔶 in flight / partly there** · **⬜ not started**
+
+| Milestone | Plain-English outcome | Status |
+|-----------|-----------------------|--------|
+| **Unified customer-chatbot accelerator** | One accelerator story: browse, cart, and AI support in one place so teams could demo the full vibe fast. | ✅ |
+| **We agreed how to split the world** | Ecommerce vs. support chat as two products: separate UIs and APIs without pretending they’re the same codebase. Captured in the separation plan. | ✅ |
+| **Two real apps with their own front and back ends** | `chat-app/` and `ecommerce-app/` each have `frontend`, `backend`, `infra`, plus forks of scripts you need for standalone deploys. | ✅ |
+| **One-shot “everything in Azure” for both apps** | Root `azure.yaml` + `infra_basic/`: shared resource group, one ACR, **four** container sites (both UIs + both APIs), post-deploy script that **`az acr build`**s all images and restarts apps. | ✅ |
+| **Production-style wiring that used to bite us** | Hosting uses the real API URL (little `runtime-config.js` handshake), CORS lists **explicit** storefront origins—not `*`—so cookies behave, AcrPull role lines up with what Azure expects today. | ✅ |
+| **Containers that match what the code imports** | Chat backend brings the right SDK stack; ecommerce backend installs what `config`/FastAPI actually need so you don’t get mystery import crashes in the cloud. | ✅ |
+| **After deploy: fill the pantry (data + AI agents)** | Search indexes seeded, Cosmos has something to chew on, Foundry/agent scripts finish the story—we still run these mostly **manually** or from a playbook; plugging them straight into **`azd up`** is next. | 🔶 |
+| **“Yep, humans tried it” sign-off** | Deliberate pass on auth, checkout-adjacent paths, chat threads, `/health`, and unhappy-path errors on **deployed** URLs—not only localhost. Always a moving target but treat as checklist before shouting “done.” | 🔶 |
+| **Widget MVP (iframe + skinny loader)** | Tiny **`embed.js`**, **`/widget`** surface in the chat frontend, **`postMessage`** for config—not merging repos, just exporting the chat pane for strangers’ pages. Technical plan spells it out. | ⬜ |
+| **Ecommerce storefront runs the widget** | One script snippet (or equivalent) on the shop layout: first real consumer of embeddable chat. | ⬜ |
+| **Treat embeds like a product** | Widget keys, allowed origins, good docs for partners, accessibility and perf on the iframe, maybe tiered bells and whistles (e.g. Voice Live gated). | ⬜ |
+
+---
+
+## What “done so far” really means day-to-day
+
+You can tell new teammates:
+
+- **We split the monolith mentally and physically**: shop code and chat code have different front doors.
+- **`azd` + infra_basic isn’t aspirational docs**—you can provision, then rely on **`cloud_build_acr`** so all four containers pull fresh tags.
+- **The boring sharp edges got sanded**: API URL injection, cookie-safe CORS, registry pull permissions aligned with Azure’s current role IDs, requirements that match Dockerfile reality.
+
+Still **earning the full green check**:
+
+- Turning post-deploy data + agent steps into something that **runs on autopilot right after provisioning** without babysitting prompts.
+- A shared **manual or automated QA pass** nobody’s embarrassed to demo to leadership.
+
+---
+
+## Road ahead: embeddable widget (still plain English)
+
+See **[embeddable-chat-widget-technical-plan.md](embeddable-chat-widget-technical-plan.md)** for nerdy depth. Rough order:
+
+1. **Build the postcard version of chat** — same backend routes, fewer pixels, lives in an iframe.
+2. **Hand the shop a postage stamp** — drop the loader on ecommerce first; fix whatever auth/CSP whack-a-mole appears.
+3. **Open the door to strangers** — other sites, brands, tiers, support matrix.
+
+---
+
+## Beyond ecommerce — how we think about **every other** surface
+
+Retail was the trainer wheels. Past that, reuse the **same Stable Core**, then differentiate with packs and config—not a rewrite each time. The four-layer frame below is straight from how we bucket extensibility (**Stable Core** → **Scenario Packs** → **Configuration Layer** → **Customization Layer**).
+
+### Stable Core (everyone inherits this fun)
+
+Reference architecture templates, scripted deploy, sensible security baseline, and the canonical agents plus base UI—you don’t reinvent the crane for every skylight.
+
+| Building block | What it gives you beyond retail |
+|----------------|--------------------------------|
+| Reference architecture | Fast PoCs on marketing sites, portals, docs—same skeleton, swap content. |
+| Deployment automation | Turnkey spin-up wherever you demo (Azure)—less hand-rolled infra drama. |
+| Security baseline | One story for identity, encryption, auditing before you slap chat on HIPAA-ish or messy partner pages. |
+| Core agents & default UI | The “actually smart” teammate + Fluent-grade shell—you skin it later. |
+
+### Scenario Packs (“which movie are we in?”)
+
+Predefined flows, canned demo scripts for different personas, data packs layered on indexes, bundles of UI chrome and rule sets, docs that say “here’s how retail differs from IT helpdesk.”
+
+Examples: proactive order-status bot for Shopify; curated FAQ mode for SaaS changelog pages; escalation-to-human playbook for airlines.
+
+### Configuration Layer (“twist knobs, don’t saw wood”)
+
+| Knob | Why it lands outside ecommerce |
+|------|-------------------------------|
+| Data & schemas | Point search + Cosmos partitions at warranties, telemetry, KB articles—not SKUs. |
+| Agent instructions & rules | Rewrite tone: compliance-friendly, cynical developer docs, multilingual support. |
+| Integration adapters | CRM, ticketing, Shopify, Slack—swap connectors per vertical without forking git. |
+| Optional sub-features | Toggle voice, citations, order lookup, SSO-only mode per tenant SKU. |
+
+### Customization Layer (“when Salesforce demands a hoodie with custom stitching”)
+
+UI/UX extension points (“where your brand hugs ours”), docs for plugging real tenant data feeds, hardened auth narratives, isolated networking when someone needs private endpoints—everything you reach for once a marquee customer insists.
+
+---
 
 ```mermaid
 flowchart LR
-  subgraph past [Past and present]
-    R0[Unified chatbot accelerator]
-    R1[Architectural separation]
-    R2[Split repos and infra_basic]
-    R3[Production hardening]
+  subgraph wave1 [Past and present]
+    A[Unified accelerator]
+    B[Designed the split]
+    C[Built chat-app plus ecommerce-app]
+    D[Landed infra_basic deploy]
+    E[Hardened runtime CORS deps]
+    F[Operational scripts still polishing]
+    G[Bakeoff testing in clouds]
+    A --> B --> C --> D --> E --> F --> G
   end
-  subgraph widgetEmbed [Embed program]
-    R4[Widget MVP]
-    R5[Ecommerce embed]
-    R6[Third party ready]
-    R7[Platform scale]
+  subgraph wave2 [Next waves]
+    H[Embed widget MVP]
+    I[Hang widget on storefront]
+    J[Partners third-party sites]
+    K[Horizontal packs and tiers]
+    H --> I --> J --> K
   end
-  R0 --> R1 --> R2 --> R3 --> R4 --> R5 --> R6 --> R7
 ```
 
 ---
 
-## Milestone summary
+## Companion docs (when you crave detail)
 
-| ID | Milestone | Outcome |
-|----|-----------|---------|
-| **R0** | **Baseline unified customer chatbot** | Single SPA + API: shop + assistant in one deploy; Cosmos, Search, Foundry wired; **`azd up`** baseline for accelerator customers. |
-| **R1** | **Architectural separation** | Two bounded contexts (**ecommerce**, **support chat**) documented; shared infra patterns identified (Cosmos containers, indexes, identities). |
-| **R2** | **Split chat-app and ecommerce-app** | Separate frontends/backends/repos layout; **`infra_basic`** provisions **four** container sites + ACR; postprovision **`cloud_build_acr`**; runtime **`VITE_API_BASE_URL`** + CORS parity. |
-| **R3** | **Split-stack production readiness** | Data scripts + agent scripts after deploy (automate or documented); **`/health`**, browser acceptance on both stacks; **`separationPlan.md`** checkpoints closed for your environment. |
-| **R4** | **Embed program starts: widget MVP** | **`/widget`** + **`embed.min.js`** (iframe); **`postMessage`** config; parity with **`/api/chat`** for text path; versioning and error UX. Technical detail: **[embeddable-chat-widget-technical-plan.md](embeddable-chat-widget-technical-plan.md)**. |
-| **R5** | **Ecommerce consumes widget** | **ecommerce-app** adds **script tag / layout hook** pointing at hosted loader; SSO or anonymous flows validated; CSP allowlist documented. |
-| **R6** | **Third-party and multi-brand** | Public embed (**widget key**, origin allowlists, optional JWT/session API); CSP **`frame-ancestors`** catalog; Lighthouse and accessibility pass for iframe surface. |
-| **R7** | **Beyond ecommerce (horizontal)** | SaaS playbook: partner CMS (WordPress/Webflow/SFCC), authenticated B2B portals, internal IT helpdesk, docs sites—same loader, **tenant** maps to policy + Cosmos partition; Voice Live entitlement by tier; analytics export for CS leadership. |
+| Doc | When to crack it open |
+|-----|-----------------------|
+| [src/separationPlan.md](../src/separationPlan.md) | Infra knobs, **`azd`**, checklist §11 vibes. |
+| [embeddable-chat-widget-technical-plan.md](embeddable-chat-widget-technical-plan.md) | iframe loaders, **`postMessage`**, CORS mind-maps. |
 
 ---
 
-## Phase narratives
+## Keep us honest (cadence cheat sheet)
 
-### Phase A — Unified customer chatbot (R0)
-
-**Goal.** One accelerator delivers **browse + cart + conversational support** so customers evaluate AI on real retail flows.
-
-**Exit criteria.**
-
-- **`azd up`** deploys workable UI and API stack (monolith-era or early split acceptable for your freeze date).
-- Search + Cosmos data path documented for POC demos.
-
----
-
-### Phase B — Split chat-app and ecommerce-app (R1–R2)
-
-**Goal.** Teams can ship, secure, and scale **shop** independently from **support**, while sharing infra where it makes economic sense (**unified **`infra_basic`**** or per-app stacks).
-
-**Exit criteria.**
-
-- Four App Services (+ ACR) with correct images; fronts call correct APIs (**runtime-config**, no wildcard CORS with credentials).
-- AcrPull and application settings validated (**§11** style checks in **`separationPlan.md`**).
-
----
-
-### Phase C — Run and prove both apps (R3)
-
-**Goal.** Operators complete **indexes, seed data, agents**; QA signs off on **critical user journeys**.
-
-**Exit criteria.**
-
-- Data + agent pipelines run after provision (automated hooks or repeatable runbooks).
-- Ecommerce catalog/cart/order smoke tests; chat session + messaging (voice optional).
-
----
-
-### Phase D — Embed: build the widget surface (R4)
-
-**Goal.** Consumers get a **hosted chat bubble** sourced from chat-app—not a merger with ecommerce SPA.
-
-**Exit criteria.**
-
-- Loader + iframe + narrow widget bundle documented in technical plan §8 M1–M2.
-- API ready for iframe origin and any first **embed allowlist**.
-
----
-
-### Phase E — Embed in ecommerce, then everywhere (R5–R7)
-
-**Goal.** **ecommerce-app** is the **first integration** only; roadmap explicitly expands to **arbitrary hosts**.
-
-**Representative expansions.**
-
-| Use case | What differs |
-|---------|----------------|
-| **Retail ecommerce** | Product context injected via **`postMessage`** (SKU, locale); optional escalation to cart handoff Deep Link. |
-| **Brand marketing site** | Lead capture focus; simpler policies; GDPR consent banner coupling. |
-| **Docs / developer portal** | Pre-indexed content in Search; citations in widget; SSO with GitHub/email. |
-| **B2B partner portal** | Strong JWT + tenant id; SLA-oriented routing to human queue. |
-
-**Exit criteria.**
-
-- Partner onboarding doc: origins, CSP snippet, **`X-Widget-Key`**, support matrix (browsers).
-- Telemetry dashboards split **hosted SPA** vs **embed** (`embed.request_id`).
-
----
-
-## How to read this with engineering backlogs
-
-- Map **epics** to **R4–R7** UI/SDK/API/infra increments.
-- Keep **technical plan** as source for ADRs (embedding model, auth, postMessage versioning).
-- Revisit **`separationPlan.md`** when infra touches **ALLOWED_ORIGINS**, new hostnames (**widget** subdomain), or new outputs for embed keys.
-
----
-
-## Review cadence (suggestion)
-
-| Horizon | Audience | Focus |
-|---------|----------|--------|
-| Monthly | Engineering + infra | R2–R3 stability; script automation |
-| Bi-monthly | Product + UX | R4 UX, accessibility, Lighthouse |
-| Quarterly | Partnerships | R6–R7 vertical playbooks |
+| How often | Who | Peek at |
+|-----------|-----|---------|
+| Monthly | Builders + infra | Containers, scripted post-deploy chores, regressions |
+| Six-ish weeks | Product + UX | Widget feel, accessibility, lighthouse-y guilt |
+| Quarterly | Biz + alliances | Scenario packs rolling out horizontally, onboarding docs glossy |

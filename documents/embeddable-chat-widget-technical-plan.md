@@ -106,7 +106,7 @@ Semantic versioning **`MAJOR`** for breaking **`postMessage`** or config schema.
 
 ## 8. Milestones (technical)
 
-Sequencing maps to roadmap phases **R4–R7** in [customer-chatbot-product-roadmap.md](customer-chatbot-product-roadmap.md).
+Sequencing aligns with later roadmap milestones (**Embed widget MVP** onward) in [customer-chatbot-product-roadmap.md](customer-chatbot-product-roadmap.md).
 
 ### M1 Widget shell
 
