@@ -28,7 +28,7 @@ High-level sequence and status. Details: [`src/separationPlan.md`](../src/separa
 | Container images match code | Chat and ecommerce **`requirements.txt`** aligned with imports; AcrPull uses current built-in role GUID. | ✅ |
 | Post-deploy data and agents | **`infra/scripts/data_scripts/`** + **`agent_scripts/`**; still mostly manual / runbook—automation after **`azd up`** open. | 🔶 |
 | Deployed QA sign-off | Auth, ecommerce flows, chat messaging, **`/health`**, error handling on production hostnames. | 🔶 |
-| Widget MVP | iframe shell + loader; **`postMessage`** config; same chat API contract. See technical plan. | ⬜ |
+| Widget MVP | Script loader + Shadow DOM widget bundle; same chat API contract with SSE streaming. See technical plan. | ⬜ |
 | Ecommerce embeds widget | Script or layout integration on **`ecommerce-app`** pointing at hosted loader. | ⬜ |
 | Embed as product | Tenant keys, origin allowlist, partner docs, iframe a11y/perf, optional feature tiers (e.g. Voice Live). | ⬜ |
 
@@ -36,9 +36,32 @@ High-level sequence and status. Details: [`src/separationPlan.md`](../src/separa
 
 ## Embed program (order of work)
 
-1. Widget UI + loader (chat-app build).
-2. Integrate on ecommerce frontend; resolve auth / CSP as needed.
-3. Third-party origins, documentation, support matrix.
+1. Build widget frontend with React + Fluent UI using Vite library mode (`widget.js` output).
+2. Implement script-loader embed with Shadow DOM isolation as default.
+3. Host widget and backend on Azure App Service; keep FastAPI as API surface.
+4. Integrate on ecommerce frontend using one script include + `ChatWidget.init(...)`.
+5. Add iframe variant only if host-site CSS isolation or policy constraints require it.
+6. Expand to third-party origins and partner docs after ecommerce validation.
+
+### Preferred implementation defaults (demo accelerator)
+
+| Area | Default |
+|------|---------|
+| Widget UI | React + Fluent UI |
+| Build output | Vite library bundle (`widget.js`) |
+| Embed method | Script loader + Shadow DOM |
+| Backend | FastAPI |
+| Streaming | SSE |
+| Hosting | Azure App Service |
+| Isolation fallback | iframe only if needed |
+
+### Avoid in initial phase
+
+- Multi-tenant platform design.
+- Web PubSub / WebSockets-first transport.
+- Microservices split for widget scope.
+- CDN / Front Door layering unless a concrete need appears.
+- Complex auth and distributed session patterns.
 
 ---
 
@@ -91,6 +114,33 @@ flowchart LR
   F --> G --> H --> I --> J --> K --> L
 ```
 
+```mermaid
+flowchart TB
+  rg[ResourceGroup]
+  ef[ecommerce-frontend-appservice]
+  eb[ecommerce-backend-fastapi]
+  wf[ai-widget-frontend-appservice]
+  wb[ai-widget-backend-fastapi]
+  rg --> ef
+  rg --> eb
+  rg --> wf
+  rg --> wb
+```
+
+Embed contract on ecommerce:
+
+```html
+<script src="https://ai-widget-frontend.azurewebsites.net/widget.js"></script>
+```
+
+Optional single-app variant for fastest demo iteration:
+
+```text
+ai-widget-fastapi-appservice
+  -> serves /widget.js and /assets/*
+  -> serves /api/chat (SSE)
+```
+
 ---
 
 ## Related documents
@@ -98,7 +148,7 @@ flowchart LR
 | Document | Use |
 |----------|-----|
 | [`src/separationPlan.md`](../src/separationPlan.md) | Infrastructure, **`postprovision`**, §11 validation. |
-| [`embeddable-chat-widget-technical-plan.md`](embeddable-chat-widget-technical-plan.md) | iframe, **`postMessage`**, CORS, packaging. |
+| [`embeddable-chat-widget-technical-plan.md`](embeddable-chat-widget-technical-plan.md) | Shadow DOM embed, FastAPI/SSE, CORS, packaging. |
 
 ---
 

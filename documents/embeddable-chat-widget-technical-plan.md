@@ -6,103 +6,142 @@ Product milestones and roadmap context live in **[customer-chatbot-product-roadm
 
 ## 1. Objectives
 
-- One **distribution artifact** developers can paste into arbitrary HTML (**script + optional tag** pattern).
+- One **distribution artifact** developers can paste into arbitrary HTML (script embed).
 - **Runtime configuration** only (API base URL, optional tenant/widget id, theme tokens). No compile-time coupling to ecommerce-app.
 - **Security-first**: predictable CORS/auth story, CSP-friendly embedding options, minimized XSS surface.
 - **Parity**: reuse chat backend routes already used by full chat SPA (`/api/chat/*`, auth, Voice Live where applicable).
+- **Simplicity first**: architecture optimized for demo velocity on Azure App Service.
 
 ## 2. Non-goals
 
 - Folding chat UI into ecommerce-app bundles or importing ecommerce source into chat.
 - Replacing the full-screen chat SPA except as a **standalone** fallback for unsupported browsers or iframe-blocked contexts.
+- Designing full multi-tenant control planes in initial release.
+- Introducing Web PubSub, microservices, AKS, Front Door, or distributed session architecture for MVP.
 
-## 3. Embedding models (recommended stack)
+## 3. Embedding model (recommended stack)
 
-Three patterns are commonly used; pick **one primary** and document fallback.
+Default to one pattern and keep one fallback.
 
-### 3.1 Primary: iframe + thin loader script (recommended)
+### 3.1 Primary: script loader + Shadow DOM (recommended)
 
 | Concern | How it is addressed |
 |--------|----------------------|
-| **CSP / JS isolation** | Parent page CSP does not execute widget JS if policy is tight; **`iframe`** with **`src`** on **`https://chat-host/...`** uses **chat-origin** CSP. |
-| **Cookie / SSO** | Session cookies scoped to **`chat-host`** simplify Easy Auth flows inside iframe; cross-site cookies avoided on parent unless explicitly needed. PostMessage notifies parent (`widget:ready`, `widget:opened`). |
-| **Versioning** | iframe URL includes **`w=semver`** query or path segment; cache-bust CDN for loader only. |
+| **CSS isolation** | Widget mounts inside a Shadow Root to isolate host CSS and reduce style collisions. |
+| **Embed simplicity** | Host adds one script include and calls `ChatWidget.init(...)`. |
+| **Debugging** | Single-window runtime avoids cross-window message inspection for initial MVP. |
+| **Versioning** | `widget.js` path/version controls rollout; host integration remains stable. |
 
 **Mechanics**
 
-1. **Loader** (~2–6 KB gzipped): `https://widgets.<chat-brand>/chat-loader/v1/embed.js`.
-2. Loader injects **`iframe`** positioned fixed bottom-right (`position`, `z-index`, `sandbox` tuned for needed capabilities).
-3. iframe loads **`https://app-chat-...azurewebsites.net/widget`** (or CDN static HTML) served from **same deploy as chat SPA** but a **narrow route**/`/widget` shell that mounts only **`ChatSurface`** subtree.
+1. Host page loads `https://<widget-host>/widget.js`.
+2. `widget.js` creates a host node, attaches Shadow Root, and mounts React app.
+3. Widget calls FastAPI APIs on same origin or configured `apiBaseUrl`.
 
-`sandbox`: start with restrictive set; extend only when mic/WebRTC Voice Live demands (`allow-same-origin` + **`allow-microphone`** as needed).
+Reference shape:
 
-### 3.2 Secondary: Shadow DOM Web Component (`<support-chat-widget>`)
+```text
+class ChatWidget {
+  init() {
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const shadowRoot = host.attachShadow({ mode: "open" })
+    createRoot(shadowRoot).render(<App />)
+  }
+}
+window.ChatWidget = new ChatWidget()
+```
 
-- Loads same bundle as SPA chunk but attaches under shadow root for style isolation on **first-party-only** embeddings where CSP allows inline component registration.
-- **Third-party** hosts often struggle with CSP for custom elements unless they allowlists your script URI; iframe remains default for SaaS breadth.
+### 3.2 Fallback: iframe loader (only when required)
 
-### 3.3 Not default: script-only DIV mount
-
-Full React tree in host DOM exposes **CSS leakage** and **global polyfill** clashes; reserve for trusted first-party integrations only.
+Use iframe only if a target host has blocking CSS/policy behavior that Shadow DOM cannot address safely.
 
 ## 4. Frontend architecture
 
 ```mermaid
 flowchart LR
   HostPage[Host ecommerce or external site]
-  Loader[embed.js loader]
-  Iframe[iframe chat widget shell]
+  Loader[widget.js loader]
+  Shadow[ShadowRoot React widget]
   Api[chat FastAPI backend]
   HostPage --> Loader
-  Loader --> Iframe
-  Iframe --> Api
+  Loader --> Shadow
+  Shadow --> Api
 ```
 
-**New build targets in chat-app frontend** (conceptual):
+**Frontend build targets**
 
-- **`widget` entry**: Vite **`build.lib`** or second **`rollupOptions.input`** exporting only chat panel + minimized chrome (Fluent as today).
-- **`/widget`** route or static **`widget/index.html`** for iframe bootstrap (minimal HTML, **`runtime-config.js`** pattern reused; query params **`?api=`** discouraged—prefer **`postMessage`** after load so secrets stay server-side props only where needed).
+- **Vite library mode** for `widget.js` bundle.
+- React + Fluent UI component tree focused on floating launcher + panel.
+- No full SPA routing for widget package.
 
-**PostMessage schema** (versioned envelope):
+Example embed API:
 
-```text
-type ChatWidgetEnvelope = {
-  v: 1;
-  channel: "contoso-chat-widget";
-  payload: KnownPayload;
-};
+```html
+<script src="https://my-widget.azurewebsites.net/widget.js"></script>
+<script>
+  ChatWidget.init({
+    apiBaseUrl: "https://my-widget.azurewebsites.net",
+    theme: "light"
+  });
+</script>
 ```
-
-Events: **`config:apply`**, **`open`**, **`close`**, **`height:report`**, **`auth:hint`** (opaque token refs only).
 
 ## 5. Backend and CORS contract
 
-Today's chat SPA uses **`withCredentials: true`**. Embed flow requires:
+Widget backend remains FastAPI.
 
-1. **`ALLOWED_ORIGINS_STR`** must explicitly list **`https://ecommerce-front...`** **and** the **iframe-document origin** (`https://app-chat...`) if API calls originate from iframe (same-origin to API if widget is subdomain of API—preferred: **same site** `widget.chat.company` ↔ `api.chat.company` with shared cookies).
-2. For **foreign** hosts (`https://partner.com`): either
-   - **Public embed mode** — anonymous/session token issued by **`POST /api/embed/session`** (short-lived JWT in memory, no cookie), **or**
-   - **PKCE SPA** hosted in iframe obtains tokens; API validates JWT `aud`/`iss`; CORS **`Access-Control-Allow-Origin`** echoes **explicit** **`https://partner.com`** (never **`*`** with credentials).
+Primary API scope:
 
-**Implementation slice**
+- `POST /api/chat` or streaming equivalent.
+- Azure OpenAI orchestration.
+- Session state for active widget conversation.
 
-- Add **`WidgetSettings`** derived from **`Origin`** + **`X-Widget-Key`** (server-side registry in Cosmos or KV) returning **conversation namespace** and **policy profile**.
-- Extend FastAPI **`CORSMiddleware`** origins from config (comma list already exists).
+Streaming recommendation:
+
+- Use SSE first (`EventSourceResponse`) instead of WebSockets.
+- Keep protocol simple for incremental token streaming.
+
+CORS:
+
+- Explicit host allowlist only.
+- No wildcard `*` for credentialed flows.
 
 ## 6. Observability and operations
 
-- **iframe** URLs carry **`rid=`** correlation id propagated to OTel **`embed.request_id`**.
+- Widget requests carry **`rid=`** correlation id propagated to OTel **`embed.request_id`**.
 - Feature flags (`widget.voice_live.enabled`) backend-driven to avoid mismatched UX.
 
 ## 7. Packaging and delivery
 
 | Artifact | Host |
 |----------|------|
-| `embed.min.js` | Azure Blob + CDN Front Door OR path on chat frontend static nginx |
-| `widget.html` bundle | Same App Service/site as chat frontend |
+| `widget.js` | App Service static path (preferred for MVP) |
+| static assets (`/assets/*`) | Same App Service as widget backend or widget frontend |
 | Integrity | **`SRI hash`** published in README + changelog |
 
 Semantic versioning **`MAJOR`** for breaking **`postMessage`** or config schema.
+
+### Deployment options
+
+Preferred for fastest demo loop:
+
+```text
+ai-widget-fastapi-appservice
+  -> /widget.js
+  -> /assets/*
+  -> /api/chat (SSE)
+```
+
+Alternative (keep current four-app split):
+
+```text
+ResourceGroup
+  -> ecommerce-frontend-appservice
+  -> ecommerce-backend-fastapi
+  -> ai-widget-frontend-appservice
+  -> ai-widget-backend-fastapi
+```
 
 ## 8. Milestones (technical)
 
@@ -110,32 +149,37 @@ Sequencing aligns with later roadmap milestones (**Embed widget MVP** onward) in
 
 ### M1 Widget shell
 
-- Vite **`/widget`** HTML + Fluent chat subtree (read-only transcripts optional).
-- **Loader** iframe injection + **`postMessage`** `config:apply` with **`apiBaseUrl`** from host (or fixed prod URL).
+- Vite library build for `widget.js`.
+- Shadow DOM mount + floating launcher/panel UX.
+- Script embed + `ChatWidget.init({ apiBaseUrl, theme })`.
 
 ### M2 Backend hardening for third-party origins
 
-- Embeddable **session** or JWT path; Cosmos partition by **`widgetTenantId`**.
-- CSP / CORS allowlist surfaced in infra (`ALLOWED_EMBED_ORIGINS` or reuse **`ALLOWED_ORIGINS_STR`** with documented comma list).
+- SSE endpoint for streamed responses.
+- Explicit origin allowlist and simplified token/session flow.
+- Keep auth straightforward for accelerator demo scope.
 
 ### M3 ecommerce-app integration PoC
 
-- Single script tag on **`ecommerce-app/frontend`** layout; QA matrix: Chrome/Safari, strict CSP ecommerce template.
+- Add script include to **`ecommerce-app/frontend`** and initialize widget.
+- Validate CSS isolation, mobile behavior, and focus/keyboard interactions.
 
 ### M4 Polish and CDN
 
-- SRI, minified loader, Lighthouse budget (TTI), error boundary UX in iframe (`widget:crash`).
+- SRI, minified bundle, Lighthouse budget, error boundary UX.
+- Introduce iframe variant only if required by host constraints.
 
 ### M5 Extensions
 
-- Multi-tenant key mapping, SSO bridge, Shopify/Webflow snippets (same loader), Voice Live gated by entitlement.
+- Optional tenant mapping, partner snippets, and advanced entitlements.
+- Defer distributed auth/session patterns until scale requires them.
 
 ## 9. Risks and mitigations
 
 | Risk | Mitigation |
 |------|------------|
-| iframe blocked by **`X-Frame-Options`** on chat SPA | Dedicated **`widget.`** subdomain; use CSP **`frame-ancestors`** allowlist embed partners. |
-| Cookie SameSite failures | Prefer **JWT-in-memory** for cross-site embed; keep Easy Auth iframe session on chat origin. |
+| Host CSS affects widget | Shadow DOM by default. |
+| Cookie SameSite failures | Prefer simple token/session flow; avoid cross-site cookie dependence for MVP. |
 | Style drift | Single Fluent theme manifest shared between SPA and widget build (shared token JSON if needed). |
 
 ## 10. References in repo
