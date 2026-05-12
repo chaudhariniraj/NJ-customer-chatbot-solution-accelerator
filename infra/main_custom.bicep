@@ -25,7 +25,7 @@ param solutionUniqueText string = take(uniqueString(subscription().id, resourceG
 param location string
 
 // Restricting deployment to regions that support all deployed models: gpt-4o-mini, text-embedding-3-small, and gpt-realtime-mini (GlobalStandard)
-@allowed(['centralus', 'eastus2', 'francecentral', 'swedencentral'])
+@allowed(['eastus2', 'francecentral', 'swedencentral'])
 @metadata({
   azd:{
     type: 'location'
@@ -607,15 +607,13 @@ module virtualMachine 'br/public:avm/res/compute/virtual-machine:0.22.0' = if (e
 }
 
 // ========== Private DNS Zones ========== //
-var keyVaultPrivateDNSZone = 'privatelink.${toLower(environment().name) == 'azureusgovernment' ? 'vaultcore.usgovcloudapi.net' : 'vaultcore.azure.net'}'
 var privateDnsZones = [
   'privatelink.cognitiveservices.azure.com'
   'privatelink.openai.azure.com'
   'privatelink.services.ai.azure.com'
   'privatelink.documents.azure.com'
-  'privatelink.blob.${environment().suffixes.storage}'
   'privatelink.search.windows.net'
-  keyVaultPrivateDNSZone
+  'privatelink.azurewebsites.net'
 ]
 
 // DNS Zone Index Constants
@@ -624,9 +622,8 @@ var dnsZoneIndex = {
   openAI: 1
   aiServices: 2
   cosmosDb: 3
-  blob: 4
-  search: 5
-  keyVault: 6
+  search: 4
+  webApp: 5
 }
 
 // List of DNS zone indices that correspond to AI-related services.
@@ -1160,10 +1157,7 @@ module webSiteBackend 'modules/web-sites.bicep' = {
           AZURE_SEARCH_PRODUCT_INDEX: 'products'
           COSMOS_DB_DATABASE_NAME: cosmosDbDatabaseName
           COSMOS_DB_ENDPOINT: 'https://${cosmosDb.outputs.name}.documents.azure.com:443/'
-          USE_FOUNDRY_AGENTS: 'True'
           AZURE_OPENAI_DEPLOYMENT_NAME: gptModelName
-          RATE_LIMIT_REQUESTS: '100'
-          RATE_LIMIT_WINDOW: '60'
           // Agent IDs will be set by post-deployment script
           FOUNDRY_CHAT_AGENT: ''
           FOUNDRY_PRODUCT_AGENT: ''
@@ -1188,7 +1182,22 @@ module webSiteBackend 'modules/web-sites.bicep' = {
       imagePullTraffic: enablePrivateNetworking ? true : false
     }
     virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : null
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: enablePrivateNetworking ? 'Disabled' : 'Enabled'
+    privateEndpoints: enablePrivateNetworking
+      ? [
+          {
+            name: 'pep-${backendWebSiteResourceName}'
+            customNetworkInterfaceName: 'nic-${backendWebSiteResourceName}'
+            privateDnsZoneGroup: {
+              privateDnsZoneGroupConfigs: [
+                { privateDnsZoneResourceId: avmPrivateDnsZones[dnsZoneIndex.webApp]!.outputs.resourceId }
+              ]
+            }
+            service: 'sites'
+            subnetResourceId: virtualNetwork!.outputs.backendSubnetResourceId
+          }
+        ]
+      : []
   }
 }
 
@@ -1306,7 +1315,8 @@ module webSite 'modules/web-sites.bicep' = {
         name: 'appsettings'
         properties: {
           NODE_ENV: 'production'
-          VITE_API_BASE_URL: 'https://${webSiteBackend.outputs.defaultHostname}'
+          VITE_API_BASE_URL: enablePrivateNetworking ? '' : 'https://${webSiteBackend.outputs.defaultHostname}'
+          BACKEND_API_URL: enablePrivateNetworking ? 'https://${webSiteBackend.outputs.defaultHostname}' : ''
         }
         // WAF aligned configuration for Monitoring
         applicationInsightResourceId: enableMonitoring ? applicationInsights!.outputs.resourceId : null

@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "14879783359872569732"
+      "templateHash": "11387055216723929134"
     }
   },
   "parameters": {
@@ -49,7 +49,6 @@
     "azureAiServiceLocation": {
       "type": "string",
       "allowedValues": [
-        "centralus",
         "eastus2",
         "francecentral",
         "swedencentral"
@@ -283,24 +282,21 @@
     "virtualMachineResourceName": "[format('vm-{0}', variables('solutionSuffix'))]",
     "virtualMachineAvailabilityZone": 1,
     "virtualMachineSize": "[if(empty(parameters('vmSize')), 'Standard_D2s_v5', parameters('vmSize'))]",
-    "keyVaultPrivateDNSZone": "[format('privatelink.{0}', if(equals(toLower(environment().name), 'azureusgovernment'), 'vaultcore.usgovcloudapi.net', 'vaultcore.azure.net'))]",
     "privateDnsZones": [
       "privatelink.cognitiveservices.azure.com",
       "privatelink.openai.azure.com",
       "privatelink.services.ai.azure.com",
       "privatelink.documents.azure.com",
-      "[format('privatelink.blob.{0}', environment().suffixes.storage)]",
       "privatelink.search.windows.net",
-      "[variables('keyVaultPrivateDNSZone')]"
+      "privatelink.azurewebsites.net"
     ],
     "dnsZoneIndex": {
       "cognitiveServices": 0,
       "openAI": 1,
       "aiServices": 2,
       "cosmosDb": 3,
-      "blob": 4,
-      "search": 5,
-      "keyVault": 6
+      "search": 4,
+      "webApp": 5
     },
     "aiRelatedDnsZoneIndices": [
       "[variables('dnsZoneIndex').cognitiveServices]",
@@ -385,7 +381,7 @@
       }
     ],
     "webServerFarmResourceName": "[format('asp-{0}', variables('solutionSuffix'))]",
-    "reactAppLayoutConfig": "{\n  \"appConfig\": {\n      \"CHAT_CHATHISTORY\": {\n        \"CHAT\": 70,\n        \"CHATHISTORY\": 30\n      }\n    }\n  }\n}",
+    "reactAppLayoutConfig": "{\r\n  \"appConfig\": {\r\n      \"CHAT_CHATHISTORY\": {\r\n        \"CHAT\": 70,\r\n        \"CHATHISTORY\": 30\r\n      }\r\n    }\r\n  }\r\n}",
     "backendWebSiteResourceName": "[format('api-{0}', variables('solutionSuffix'))]",
     "aiProjectResourceId": "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiFoundryAiServicesResourceName'), variables('aiFoundryAiProjectResourceName'))]",
     "webSiteResourceName": "[format('app-{0}', variables('solutionSuffix'))]"
@@ -27301,8 +27297,8 @@
       "dependsOn": [
         "aiFoundryAiServices",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').cognitiveServices)]",
-        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').aiServices)]",
+        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
         "virtualNetwork"
       ]
     },
@@ -36414,10 +36410,7 @@
                   "AZURE_SEARCH_PRODUCT_INDEX": "products",
                   "COSMOS_DB_DATABASE_NAME": "[variables('cosmosDbDatabaseName')]",
                   "COSMOS_DB_ENDPOINT": "[format('https://{0}.documents.azure.com:443/', reference('cosmosDb').outputs.name.value)]",
-                  "USE_FOUNDRY_AGENTS": "True",
                   "AZURE_OPENAI_DEPLOYMENT_NAME": "[parameters('gptModelName')]",
-                  "RATE_LIMIT_REQUESTS": "100",
-                  "RATE_LIMIT_WINDOW": "60",
                   "FOUNDRY_CHAT_AGENT": "",
                   "FOUNDRY_PRODUCT_AGENT": "",
                   "FOUNDRY_POLICY_AGENT": "",
@@ -36441,9 +36434,8 @@
             }
           },
           "virtualNetworkSubnetId": "[if(parameters('enablePrivateNetworking'), createObject('value', reference('virtualNetwork').outputs.webserverfarmSubnetResourceId.value), createObject('value', null()))]",
-          "publicNetworkAccess": {
-            "value": "Enabled"
-          }
+          "publicNetworkAccess": "[if(parameters('enablePrivateNetworking'), createObject('value', 'Disabled'), createObject('value', 'Enabled'))]",
+          "privateEndpoints": "[if(parameters('enablePrivateNetworking'), createObject('value', createArray(createObject('name', format('pep-{0}', variables('backendWebSiteResourceName')), 'customNetworkInterfaceName', format('nic-{0}', variables('backendWebSiteResourceName')), 'privateDnsZoneGroup', createObject('privateDnsZoneGroupConfigs', createArray(createObject('privateDnsZoneResourceId', reference(format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').webApp)).outputs.resourceId.value))), 'service', 'sites', 'subnetResourceId', reference('virtualNetwork').outputs.backendSubnetResourceId.value))), createObject('value', createArray()))]"
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -38343,6 +38335,7 @@
       "dependsOn": [
         "aiFoundryAiServicesProject",
         "applicationInsights",
+        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').webApp)]",
         "cosmosDb",
         "existingAiFoundryAiServicesProject",
         "logAnalyticsWorkspace",
@@ -38976,7 +38969,8 @@
                 "name": "appsettings",
                 "properties": {
                   "NODE_ENV": "production",
-                  "VITE_API_BASE_URL": "[format('https://{0}', reference('webSiteBackend').outputs.defaultHostname.value)]"
+                  "VITE_API_BASE_URL": "[if(parameters('enablePrivateNetworking'), '', format('https://{0}', reference('webSiteBackend').outputs.defaultHostname.value))]",
+                  "BACKEND_API_URL": "[if(parameters('enablePrivateNetworking'), format('https://{0}', reference('webSiteBackend').outputs.defaultHostname.value), '')]"
                 },
                 "applicationInsightResourceId": "[if(parameters('enableMonitoring'), reference('applicationInsights').outputs.resourceId.value, null())]"
               }

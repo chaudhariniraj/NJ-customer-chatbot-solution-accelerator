@@ -1,13 +1,14 @@
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/primitives/button';
+import { Input } from '@/components/primitives/input';
+import { ScrollArea } from '@/components/primitives/scroll-area';
+import { Skeleton } from '@/components/primitives/skeleton';
+import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { getApiBaseUrl, getVoiceLiveConfig } from '@/lib/api';
 import { floatTo16BitPCM, pcm16ToBase64, playPCM16Chunk, resampleTo24k } from '@/lib/audioUtils';
 import { ChatMessage, Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Send20Regular, Stop20Filled } from '@fluentui/react-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EnhancedChatMessageBubble } from './EnhancedChatMessageBubble';
 
 interface EnhancedChatPanelProps {
@@ -15,8 +16,6 @@ interface EnhancedChatPanelProps {
   onSendMessage: (content: string) => void;
   onVoiceMessage?: (text: string, role: 'user' | 'assistant') => void;
   isTyping: boolean;
-  isOpen: boolean;
-  onClose: () => void;
   onAddToCart?: (product: Product) => void;
   className?: string;
   isLoading?: boolean;
@@ -28,8 +27,6 @@ export const EnhancedChatPanel = ({
   onSendMessage,
   onVoiceMessage,
   isTyping,
-  isOpen,
-  onClose,
   onAddToCart,
   className,
   isLoading = false,
@@ -88,7 +85,7 @@ export const EnhancedChatPanel = ({
   const speakingMessageIdRef = useRef<string | null>(null);
 
   const getVoiceMessageKey = (message: ChatMessage, index: number): string => {
-    const rawTimestamp = message.timestamp instanceof Date ? message.timestamp.getTime() : new Date(message.timestamp).getTime();
+    const rawTimestamp = new Date(message.timestamp).getTime();
     const safeTimestamp = Number.isNaN(rawTimestamp) ? 0 : rawTimestamp;
     return `${message.id || 'no-id'}-${message.sender}-${safeTimestamp}-${index}`;
   };
@@ -202,23 +199,29 @@ export const EnhancedChatPanel = ({
     }
   };
 
-  const handleSend = () => {
+  const isInputDisabled = useMemo(
+    () => isTyping || isLoading || isVoiceProcessing,
+    [isTyping, isLoading, isVoiceProcessing],
+  );
+
+  const handleSend = useCallback(() => {
     if (inputValue.trim()) {
       onSendMessage(inputValue.trim());
       setInputValue('');
-      // Focus the input after sending
       setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
     }
-  };
+  }, [inputValue, onSendMessage]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [handleSend]);
+
+  useAutoScroll(messagesEndRef, [messages, isTyping]);
 
   // Derive voice processing state from voiceSessionState
   useEffect(() => {
@@ -226,10 +229,6 @@ export const EnhancedChatPanel = ({
     setIsVoiceProcessing(processing);
     onVoiceProcessingChangeRef.current?.(processing);
   }, [voiceSessionState]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
 
   useEffect(() => {
     let isMounted = true;
@@ -252,7 +251,6 @@ export const EnhancedChatPanel = ({
     };
   }, []);
 
-  // Maintain focus on input when not typing
   useEffect(() => {
     if (!isTyping && !isLoading && inputRef.current) {
       inputRef.current.focus();
@@ -780,14 +778,11 @@ export const EnhancedChatPanel = ({
 
   return (
     <div className={cn("flex flex-col h-full bg-background", className)}>
-      {/* Scrollable Chat Content Area - Takes remaining space */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1 h-full" ref={scrollAreaRef}>
           <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
-            {/* Loading State - Show skeleton when loading chat history */}
             {isLoading && messages.length === 0 ? (
               <div className="space-y-4">
-                {/* Loading skeleton for messages */}
                 <div className="flex gap-3 justify-start">
                   <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
                   <div className="space-y-2 flex-1 max-w-[80%]">
@@ -812,14 +807,12 @@ export const EnhancedChatPanel = ({
                 {/* Welcome Message - Only show when no messages, not loading, and no active voice session */}
                 {messages.length === 0 && !isTyping && !isLoading && voiceSessionState === 'idle' && !streamingVoiceText && (
               <div className="flex flex-col items-center justify-center text-center space-y-6 h-full min-h-[400px]">
-                {/* AI Assistant Icon */}
                 <img 
                   src="/contoso-ai-icon.png" 
                   alt="AI Assistant" 
                   className="w-16 h-16"
                 />
                 
-                {/* Welcome Text */}
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold text-foreground">
                     Hey! I'm here to help.
@@ -829,14 +822,12 @@ export const EnhancedChatPanel = ({
                   </p>
                 </div>
                 
-                {/* Quick Start Hint */}
                 <div className="text-xs text-muted-foreground">
                   Click the new chat button above to start a new chat anytime
                 </div>
               </div>
             )}
 
-            {/* Chat Messages */}
             {messages.map((message, index) => {
               const voiceMessageKey = getVoiceMessageKey(message, index);
               return (
@@ -858,20 +849,19 @@ export const EnhancedChatPanel = ({
                   id: 'voice-streaming',
                   content: '',
                   sender: 'assistant',
-                  timestamp: new Date()
+                  timestamp: new Date().toISOString()
                 }}
                 isTyping={true}
               />
             )}
 
-            {/* Typing Indicator - Only show when AI is actively responding */}
             {isTyping && !isLoading && (
               <EnhancedChatMessageBubble
                 message={{
                   id: 'typing',
                   content: '',
                   sender: 'assistant',
-                  timestamp: new Date()
+                  timestamp: new Date().toISOString()
                 }}
                 isTyping={true}
               />
@@ -883,9 +873,7 @@ export const EnhancedChatPanel = ({
         </ScrollArea>
       </div>
 
-      {/* Fixed Input Footer */}
       <div className="flex-shrink-0 border-t bg-background p-2 sm:p-4 space-y-2 sm:space-y-3">
-        {/* Input Field */}
         <div className="flex-1 relative">
           <Input
             ref={inputRef}
@@ -894,7 +882,7 @@ export const EnhancedChatPanel = ({
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
             className="pr-21 resize-none min-h-[40px]"
-            disabled={isTyping || isLoading || isVoiceProcessing}
+            disabled={isInputDisabled}
           />
           <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex gap-1">
             <Button
@@ -945,14 +933,13 @@ export const EnhancedChatPanel = ({
               className="h-8 w-8 p-0"
               title="Send message"
               onClick={handleSend}
-              disabled={!inputValue.trim() || isTyping || isLoading || isVoiceProcessing}
+              disabled={!inputValue.trim() || isInputDisabled}
             >
               <Send20Regular className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Disclaimer */}
         <p className="text-xs text-muted-foreground text-center">
           AI-generated content may be incorrect
         </p>
