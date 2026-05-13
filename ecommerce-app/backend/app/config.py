@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -23,12 +24,15 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins(self) -> List[str]:
-        """Parse allowed origins from comma-separated string"""
-        return [
-            origin.strip()
-            for origin in self.allowed_origins_str.split(",")
-            if origin.strip()
+        raw = os.environ.get("ALLOWED_ORIGINS_STR")
+        if raw is None or not str(raw).strip():
+            raw = self.allowed_origins_str
+        parts = [
+            o.strip()
+            for o in str(raw).split(",")
+            if o.strip() and o.strip() != "*"
         ]
+        return parts or ["http://localhost:5173", "http://localhost:3000"]
 
     # Azure Cosmos DB
     cosmos_db_endpoint: Optional[str] = None

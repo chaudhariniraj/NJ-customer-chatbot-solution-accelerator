@@ -51,6 +51,9 @@ function get_values_from_azd_env() {
     backend_app_uid=$(azd env get-value API_UID)
     app_service=$(azd env get-value API_APP_NAME)
     resource_group=$(azd env get-value RESOURCE_GROUP_NAME)
+    if [[ -z "$resource_group" ]] || [[ "$resource_group" =~ ^ERROR: ]]; then
+        resource_group=$(azd env get-value AZURE_RESOURCE_GROUP)
+    fi
     ai_search_endpoint=$(azd env get-value AZURE_AI_SEARCH_ENDPOINT)
     azure_openai_endpoint=$(azd env get-value AZURE_OPENAI_ENDPOINT)
     embedding_model_name=$(azd env get-value AZURE_OPENAI_EMBEDDING_MODEL)
@@ -327,6 +330,12 @@ cleanup_on_exit() {
 # Set up trap to ensure cleanup happens on exit
 trap cleanup_on_exit EXIT INT TERM
 
+noninteractive=false
+case "${POSTPROVISION_NON_INTERACTIVE:-}" in 1|true|TRUE) noninteractive=true ;; esac
+case "${CI:-}" in true|TRUE) noninteractive=true ;; esac
+[[ -n "${GITHUB_ACTIONS:-}" ]] && noninteractive=true
+case "${TF_BUILD:-}" in True|true) noninteractive=true ;; esac
+
 # Authenticate with Azure
 if az account show &> /dev/null; then
     echo "Already authenticated with Azure."
@@ -350,48 +359,47 @@ currentSubscriptionName=$(az account show --query name -o tsv)
 
 if [[ "$currentSubscriptionId" != "$azSubscriptionId" && -n "$azSubscriptionId" ]]; then
     echo "Current selected subscription is $currentSubscriptionName ( $currentSubscriptionId )."
-    read -p "Do you want to continue with this subscription?(y/n): " confirmation
-    if [[ "$confirmation" != "y" && "$confirmation" != "Y" ]]; then
-        echo "Fetching available subscriptions..."
-        availableSubscriptions=$(az account list --query "[?state=='Enabled'].[name,id]" --output tsv)
-        
-        # Convert to array
-        IFS=$'\n' read -d '' -r -a subscriptions <<< "$availableSubscriptions"
-        
-        while true; do
-            echo ""
-            echo "Available Subscriptions:"
-            echo "========================"
-            index=1
-            for ((i=0; i<${#subscriptions[@]}; i++)); do
-                IFS=$'\t' read -r name id <<< "${subscriptions[i]}"
-                echo "$index. $name ( $id )"
-                ((index++))
-            done
-            echo "========================"
-            echo ""
-            
-            read -p "Enter the number of the subscription (1-$((${#subscriptions[@]}))) to use: " subscriptionIndex
-            
-            if [[ "$subscriptionIndex" =~ ^[0-9]+$ ]] && [[ "$subscriptionIndex" -ge 1 ]] && [[ "$subscriptionIndex" -le "${#subscriptions[@]}" ]]; then
-                selectedIndex=$((subscriptionIndex - 1))
-                IFS=$'\t' read -r selectedSubscriptionName selectedSubscriptionId <<< "${subscriptions[selectedIndex]}"
-                
-                if az account set --subscription "$selectedSubscriptionId"; then
-                    echo "Switched to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )"
-                    azSubscriptionId="$selectedSubscriptionId"
-                    break
-                else
-                    echo "Failed to switch to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )."
-                fi
-            else
-                echo "Invalid selection. Please try again."
-            fi
-        done
+    if [[ "$noninteractive" == true ]]; then
+        echo "Non-interactive: switching subscription to $azSubscriptionId"
+        az account set --subscription "$azSubscriptionId" || exit 1
     else
-        echo "Proceeding with the current subscription: $currentSubscriptionName ( $currentSubscriptionId )"
-        az account set --subscription "$currentSubscriptionId"
-        azSubscriptionId="$currentSubscriptionId"
+        read -p "Do you want to continue with this subscription?(y/n): " confirmation
+        if [[ "$confirmation" != "y" && "$confirmation" != "Y" ]]; then
+            echo "Fetching available subscriptions..."
+            availableSubscriptions=$(az account list --query "[?state=='Enabled'].[name,id]" --output tsv)
+            readarray -t subscriptions <<< "$availableSubscriptions"
+            while true; do
+                echo ""
+                echo "Available Subscriptions:"
+                echo "========================"
+                index=1
+                for ((i=0; i<${#subscriptions[@]}; i++)); do
+                    IFS=$'\t' read -r name id <<< "${subscriptions[i]}"
+                    echo "$index. $name ( $id )"
+                    ((index++))
+                done
+                echo "========================"
+                echo ""
+                read -p "Enter the number of the subscription (1-$((${#subscriptions[@]}))) to use: " subscriptionIndex
+                if [[ "$subscriptionIndex" =~ ^[0-9]+$ ]] && [[ "$subscriptionIndex" -ge 1 ]] && [[ "$subscriptionIndex" -le "${#subscriptions[@]}" ]]; then
+                    selectedIndex=$((subscriptionIndex - 1))
+                    IFS=$'\t' read -r selectedSubscriptionName selectedSubscriptionId <<< "${subscriptions[selectedIndex]}"
+                    if az account set --subscription "$selectedSubscriptionId"; then
+                        echo "Switched to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )"
+                        azSubscriptionId="$selectedSubscriptionId"
+                        break
+                    else
+                        echo "Failed to switch to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )."
+                    fi
+                else
+                    echo "Invalid selection. Please try again."
+                fi
+            done
+        else
+            echo "Proceeding with the current subscription: $currentSubscriptionName ( $currentSubscriptionId )"
+            az account set --subscription "$currentSubscriptionId"
+            azSubscriptionId="$currentSubscriptionId"
+        fi
     fi
 else
     echo "Proceeding with the subscription: $currentSubscriptionName ( $currentSubscriptionId )"

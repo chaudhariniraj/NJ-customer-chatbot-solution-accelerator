@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Theme } from '@fluentui/react-components';
 import { coralLightTheme, coralDarkTheme, createThemeStyles } from '../theme/coralTheme';
 
-type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
@@ -15,11 +15,19 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 interface ThemeProviderProps {
   children: ReactNode;
+  themeSurface?: HTMLElement | null;
+  initialThemeMode?: ThemeMode;
+  embedTheme?: boolean;
 }
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  // Initialize theme from localStorage or default to dark (matching Figma)
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({
+  children,
+  themeSurface = null,
+  initialThemeMode,
+  embedTheme = false,
+}) => {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (initialThemeMode) return initialThemeMode;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('coral-theme-mode');
       return (saved as ThemeMode) || 'dark';
@@ -29,18 +37,16 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   const theme = themeMode === 'light' ? coralLightTheme : coralDarkTheme;
 
-  // Apply theme styles to CSS custom properties
   useEffect(() => {
-    const root = document.documentElement;
-    const body = document.body;
+    if (embedTheme && !themeSurface) return;
+    const root = themeSurface ?? document.documentElement;
+    const body = themeSurface ?? document.body;
     const themeStyles = createThemeStyles(theme);
-    
-    // Set Fluent UI theme tokens
+
     Object.entries(themeStyles).forEach(([property, value]) => {
       root.style.setProperty(property, value);
     });
 
-    // Set custom theme variables
     if (themeMode === 'dark') {
       root.style.setProperty('--coral-bg-primary', '#1a1a1a');
       root.style.setProperty('--coral-bg-secondary', '#262626');
@@ -57,25 +63,26 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       root.style.setProperty('--coral-text-muted', '#6c757d');
     }
 
-    // Set data attribute for CSS selectors
     root.setAttribute('data-theme', themeMode);
-    
-    // Update both html and body classes for global styling
+
     root.className = root.className.replace(/theme-\w+/g, '');
     root.classList.add(`theme-${themeMode}`);
-    
-    body.className = body.className.replace(/theme-\w+/g, '');
-    body.classList.add(`theme-${themeMode}`);
-    
-    // Set background directly on body to ensure it covers everything
-    body.style.backgroundColor = themeMode === 'dark' ? '#1a1a1a' : '#ffffff';
-    body.style.color = themeMode === 'dark' ? '#ffffff' : '#212529';
-  }, [theme, themeMode]);
 
-  // Save theme preference to localStorage
+    if (!themeSurface) {
+      body.className = body.className.replace(/theme-\w+/g, '');
+      body.classList.add(`theme-${themeMode}`);
+      body.style.backgroundColor = themeMode === 'dark' ? '#1a1a1a' : '#ffffff';
+      body.style.color = themeMode === 'dark' ? '#ffffff' : '#212529';
+    } else {
+      root.style.backgroundColor = themeMode === 'dark' ? '#1a1a1a' : '#ffffff';
+      root.style.color = themeMode === 'dark' ? '#ffffff' : '#212529';
+    }
+  }, [theme, themeMode, themeSurface, embedTheme]);
+
   useEffect(() => {
+    if (themeSurface || embedTheme) return;
     localStorage.setItem('coral-theme-mode', themeMode);
-  }, [themeMode]);
+  }, [themeMode, themeSurface, embedTheme]);
 
   const toggleTheme = () => {
     setThemeMode(prev => prev === 'light' ? 'dark' : 'light');

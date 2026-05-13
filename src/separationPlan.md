@@ -55,14 +55,14 @@ The following is **in progress** in the repository; it is not aspirational-only.
 
 | Area | Status |
 |------|--------|
-| **Layout** | `ecommerce-app/` and `chat-app/` each contain `backend/`, `frontend/`, `infra/` (full Bicep fork from root). Repo-root **[`azure.yaml`](../azure.yaml)** uses **`infra.path: infra_basic`** and declares four **`services:`** entries for packaging; **`hooks.postprovision`** runs **[`infra_basic/scripts/cloud_build_acr.ps1`](../infra_basic/scripts/cloud_build_acr.ps1)** / **[`.sh`](../infra_basic/scripts/cloud_build_acr.sh)** only. Per-app dirs may carry their own **`azure.yaml`** for standalone deploys. |
-| **Backend split** | E-commerce [`ecommerce-app/backend/app/main.py`](../ecommerce-app/backend/app/main.py): **auth, products, cart, orders** (no chat, no voice). Chat [`chat-app/backend/app/main.py`](../chat-app/backend/app/main.py): **auth, chat, voice_live** only (no products/cart); Foundry message path uses **chat + policy** agents/tools only (no product agent). |
+| **Layout** | `ecommerce-app/` and `chat-app/` each contain `backend/`, `frontend/`, `infra/` (full Bicep fork from root). Repo-root **[`azure.yaml`](../azure.yaml)** uses **`infra.path: infra_basic`** and declares four **`services:`** entries for packaging; **`hooks.postprovision`** runs **[`infra_basic/scripts/postprovision_all.ps1`](../infra_basic/scripts/postprovision_all.ps1)** / **[`.sh`](../infra_basic/scripts/postprovision_all.sh)** (**`cloud_build_acr`** then **data + agent** scripts via **`postprovision_data_agents`**). Per-app dirs may carry their own **`azure.yaml`** for standalone deploys. |
+| **Backend split** | E-commerce [`ecommerce-app/backend/app/main.py`](../ecommerce-app/backend/app/main.py): **auth, products, cart, orders** (no chat, no voice). Chat [`chat-app/backend/app/main.py`](../chat-app/backend/app/main.py): **auth, chat, voice_live** only (no products/cart). Foundry orchestration matches **[`infra/scripts/agent_scripts/01_create_agents.py`](../infra/scripts/agent_scripts/01_create_agents.py)**:[`chat-app/backend/app/routers/chat.py`](../chat-app/backend/app/routers/chat.py) **`POST /api/chat/message`** (and **[`foundry_agent_utils`](../chat-app/backend/app/utils/foundry_agent_utils.py)** used by voice) loads **`FOUNDRY_CHAT_AGENT`** with **`product_agent`** + **`policy_agent`** tools; **`FOUNDRY_PRODUCT_AGENT`**, **`FOUNDRY_POLICY_AGENT`** must be set on the **chat** API app (**`API_APP_NAME`** in **`infra_basic`**). |
 | **Backend dependencies & infra fixes** | Container images install dependencies from each app’s **[`requirements.txt`](../chat-app/backend/requirements.txt)** (chat aligned with accelerator SDK imports; ecommerce includes **`pydantic-settings`**, telemetry packages, optional guarded **`configure_azure_monitor`** import). **[`infra_basic/main.bicep`](../infra_basic/main.bicep)** assigns **AcrPull** using built-in role **`7f951dda-4ed3-4680-a7ca-43fe172d538d`** (older AcrPull GUID removed by Azure). |
 | **Frontend split** | E-commerce: shop + cart UI, header without chat control. Chat: **AI chat only**—single-column chat, header “Contoso Support”, no cart or product grid ([`chat-app/frontend/src/App.tsx`](../chat-app/frontend/src/App.tsx)). |
 | **Deployed frontends → APIs** | Both SPAs resolve API base URL from **`window.__RUNTIME_CONFIG__.VITE_API_BASE_URL`**: **`index.html`** loads **`/runtime-config.js`** before the Vite bundle; container **[`startup.sh`](../chat-app/frontend/startup.sh)** emits that file from App Service **`VITE_API_BASE_URL`**. Fallback: **`import.meta.env.VITE_API_BASE_URL`** / dev-only **`http://localhost:8000`** ([`chat-app/frontend/src/lib/api.ts`](../chat-app/frontend/src/lib/api.ts), commerce equivalent). **`ALLOWED_ORIGINS_STR`** must list the **exact** HTTPS frontend origin(s)—**not** **`*`**—because axios uses **`withCredentials: true`** (see **`infra_basic/main.bicep`**). |
 | **Azure provision** | Per-app stacks were **successfully provisioned** with `azd provision --no-prompt` in **Central US** (East US 2 hit Azure Search **InsufficientResourcesAvailable**). Example env names: **`ecomcu`** / **`chatcu`**; resource groups: **`rg-ccsa-ecomcu`** / **`rg-ccsa-chatcu`**. **Unified root deploy:** **[`infra_basic/main.bicep`](../infra_basic/main.bicep)** provisions **four** Linux container App Services (chat + ecommerce × API/UI), **ACR** in the same resource group, and **AcrPull** for each site’s identity. |
-| **`azd up` (root, unified)** | **Validated:** **`azd provision`** plus **postprovision** **`cloud_build_acr`** (four **`az acr build`** contexts + **`az webapp restart`** on all four names) reliably refreshes container images on the deployed sites. **`azd deploy`** vs hook-only packaging can still be clarified per team convention; hooks are the source of truth for image refresh today. **Remaining:** end-to-end product/chat behavior depends on running data and agent scripts (**§6.2**) and validating flows in browser. |
-| **Post-provision (data / agents)** | **Not wired into `azd up`:** root **`hooks.postprovision`** does **not** run **[`infra/scripts/data_scripts/`](../infra/scripts/data_scripts/)** or **[`infra/scripts/agent_scripts/`](../infra/scripts/agent_scripts/)**—those are **manual** until an additional hook or wrapper script is added (**Next steps**, **§6.2**). Duplicates live under **`chat-app/infra/scripts/`** and **`ecommerce-app/infra/scripts/`** for standalone stacks. |
+| **`azd up` (root, unified)** | **Validated:** **`azd provision`** plus **postprovision** **`postprovision_all`** runs **`cloud_build_acr`** (four **`az acr build`** + **`az webapp restart`**) then **`postprovision_data_agents`** (data scripts then agent scripts). **`azd deploy`** vs hook-only packaging can still be clarified per team convention; hooks are the source of truth for image refresh today. **Remaining:** confirm hooks succeed in CI/non-interactive shells; validate chat/product flows end-to-end in browser (**§11**). |
+| **Post-provision (data / agents)** | Wired via **`postprovision_all`**: root **`hooks.postprovision`** invokes **`infra/scripts/data_scripts/`** then **`infra/scripts/agent_scripts/`** after **`cloud_build_acr`** (see **[`infra_basic/scripts/postprovision_data_agents.ps1`](../infra_basic/scripts/postprovision_data_agents.ps1)**). Duplicates live under **`chat-app/infra/scripts/`** and **`ecommerce-app/infra/scripts/`** for standalone stacks. |
 | **Infra scope** | Each app still ships the **full** accelerator template (including AI resources); trimming e-commerce-only Azure resources remains a follow-up. |
 | **Container images on deployed App Services** | **`infra_basic`** defaults: **`ccsa-chat-frontend`** / **`ccsa-chat-backend`** / **`ccsa-ecom-frontend`** / **`ccsa-ecom-backend`** plus **`AZURE_ENV_IMAGETAG`**. Per-app **[`infra/scripts/build_*_acr`](../chat-app/infra/scripts/build_backend_acr.ps1)** (also at repo **`infra/scripts/`** where present) support one-off **`az acr build`** paths; **`linuxFxVersion`** must match deployed tag. See **`documents/CustomizingAzdParameters.md`**. |
 | **Local `npm run dev` (split frontends)** | From each app’s **`frontend/`** directory (not `src/`): **`npm install --legacy-peer-deps`**, then **`npm run dev`**. Stack uses **Vite 6**, **`@tailwindcss/vite`**, and Tailwind v4-style CSS. **Vite 8** (Rolldown) can hit native binding issues on some Windows setups; **Node ≥20.19** helps if you upgrade Vite later. |
@@ -71,18 +71,18 @@ The following is **in progress** in the repository; it is not aspirational-only.
 
 ### Where this effort left off (checkpoint)
 
-- **Unified deploy:** **`infra_basic/`** provisions **ACR**, **four** Linux container web apps, shared AI/Cosmos/Search wiring, **AcrPull** on the registry for each site’s identity, **`VITE_API_BASE_URL`** and **`ALLOWED_ORIGINS_STR`** paired per stack. **Postprovision** **`cloud_build_acr`** builds all four images and restarts apps so **frontend and backend** containers refresh together.
-- **Runtime behavior:** Hosted SPAs resolve the API URL via **`runtime-config.js`**; CORS avoids **`*`** for credentialed requests.
-- **What’s left:** **Data plane** (search indexes + Cosmos samples) via **data_scripts**, **Foundry/agent** provisioning via **agent_scripts**, then **functional testing** (auth, shop, cart, chat, optional voice)—not bootstrap “containers won’t start” work.
+- **Unified deploy:** **`infra_basic/`** provisions **ACR**, **four** Linux container web apps, shared AI/Cosmos/Search wiring, **AcrPull** on the registry for each site’s identity, **`VITE_API_BASE_URL`** and **`ALLOWED_ORIGINS_STR`** paired per stack. **Postprovision** **`postprovision_all`** runs **`cloud_build_acr`** then **data + agent** automation (**§6.2**).
+- **Runtime behavior:** Hosted SPAs resolve the API URL via **`runtime-config.js`** (with **`WEBSITE_HOSTNAME`** fallback in **`startup.sh`** where applicable); CORS avoids **`*`** for credentialed SPA requests (**`ALLOWED_ORIGINS_STR`** per API).
+- **What’s left:** Operational verification that **postprovision** completes without prompts/hangs; **Foundry** chat errors if **`FOUNDRY_*`** mismatch—confirm **`FOUNDRY_PRODUCT_AGENT`** present on chat API (**§11**); **functional testing** (auth, shop, cart, chat, optional voice).
 - **Per-app azd:** Under **`chat-app/`** and **`ecommerce-app/`**, **`infra/scripts/build_*_acr`** and **`verify_linuxfx`** remain useful for **single-stack** deploys.
 
 ### Next steps
 
-1. **First priority — scripts after `azd up`:** Extend repo-root **[`azure.yaml`](../azure.yaml)** **`hooks.postprovision`** (second hook after **`cloud_build_acr`**) or ship a documented non-interactive wrapper that runs (**§6.2**) in order: (a) **[`infra/scripts/data_scripts/run_upload_data_scripts.ps1`](../infra/scripts/data_scripts/run_upload_data_scripts.ps1)** / **[`.sh`](../infra/scripts/data_scripts/run_upload_data_scripts.sh)**, then (b) **[`infra/scripts/agent_scripts/run_create_agents_scripts.ps1`](../infra/scripts/agent_scripts/run_create_agents_scripts.ps1)** / **[`.sh`](../infra/scripts/agent_scripts/run_create_agents_scripts.sh)**. Refactor **interactive** paths in data scripts (**`Read-Host`**, subscription prompts) so CI/hooks cannot hang—a known gap until completed.
-2. **Functional validation:** Against deployed **`CHAT_*`** and **`ECOMMERCE_*`** URLs (**`azd env get-values`** / portal): **`/health`** on both APIs; browser flows with cookies/Easy Auth; chat sessions and ecommerce catalog/cart/order paths; optionally Voice Live after env is set.
-3. **Automation hardening:** Align **`RESOURCE_GROUP_NAME`** vs **`AZURE_RESOURCE_GROUP`** in agent runners ([**`agent_scripts`**](../infra/scripts/agent_scripts/run_create_agents_scripts.ps1) vs **[`data_scripts`**](../infra/scripts/data_scripts/run_upload_data_scripts.ps1)); when assigning RBAC inside scripts use **`API_APP_NAME` / `API_PID`** vs **`ECOMMERCE_*`** intentionally under **unified** outputs (**implementation table**, last row).
+1. **Postprovision reliability:** Ensure **`postprovision_all`** finishes in automation (**`POSTPROVISION_NON_INTERACTIVE`**, subscription alignment); if hooks fail, run **[`infra/scripts/data_scripts/run_upload_data_scripts.ps1`](../infra/scripts/data_scripts/run_upload_data_scripts.ps1)** then **[`infra/scripts/agent_scripts/run_create_agents_scripts.ps1`](../infra/scripts/agent_scripts/run_create_agents_scripts.ps1)** manually from repo root (**§6.2**).
+2. **Functional validation:** Against deployed **`CHAT_*`** and **`ECOMMERCE_*`** URLs (**`azd env get-values`** / portal): **`/health`** on both APIs; **`FOUNDRY_CHAT_AGENT`**, **`FOUNDRY_PRODUCT_AGENT`**, **`FOUNDRY_POLICY_AGENT`** on **chat** API app (**§11.2**); browser chat + ecommerce flows; optionally Voice Live.
+3. **Automation hardening:** When scripting RBAC use **`API_APP_NAME` / `API_PID`** vs **`ECOMMERCE_*`** under unified **`infra_basic`** outputs (**implementation table**, last row).
 
-**Post-deploy verification:** Portal or **`az webapp config show`**: each of **four** App Services **`linuxFxVersion`** = **`DOCKER|<registry>/<repo>:<tag>`**. Open **`CHAT_WEB_APP_URL`** (**Contoso Support**) and **`ECOMMERCE_WEB_APP_URL`** (shop/cart); **`curl`** **`CHAT_API_APP_URL`** and **`ECOMMERCE_API_APP_URL`** **`/health`**.
+**Post-deploy verification:** Portal or **`az webapp config show`**: each of **four** App Services **`linuxFxVersion`** = **`DOCKER|<registry>/<repo>:<tag>`**. Open **`CHAT_WEB_APP_URL`** and **`ECOMMERCE_WEB_APP_URL`**; **`curl`** **`CHAT_API_APP_URL`** / **`ECOMMERCE_API_APP_URL`** **`/health`**. After changing chat Foundry wiring, rebuild **`ccsa-chat-backend`** (**`pwsh -File infra_basic/scripts/cloud_build_acr.ps1`** or full **`postprovision_all`**) and restart **chat** API web app.
 
 For **per-app-only** deploys, **`AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT`**, **`AZURE_ENV_IMAGETAG`**, and optional repo overrides still must match **`linuxFxVersion`** (**`infra/scripts/verify_linuxfx.ps1`** / **`.sh`** under each app).
 
@@ -452,7 +452,7 @@ Provisioning is **Bicep-driven**. Container images are expected to exist in **Az
 
 1. Build images in ACR with per-stack repositories (defaults **`ccsa-chat-frontend`** / **`ccsa-chat-backend`** vs **`ccsa-ecom-frontend`** / **`ccsa-ecom-backend`**): run **`infra/scripts/build_frontend_acr`** and **`build_backend_acr`** (**.ps1** / **`.sh`**) from each app. CI may substitute **`az acr build`** (for example `.github/workflows/job-docker-build.yml`).
 2. Set azd environment values used by `infra/main.parameters.json` (**`AZURE_ENV_IMAGETAG`**, **`AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT`**, optional **`AZURE_ENV_FRONTEND_IMAGE_REPO`** / **`AZURE_ENV_BACKEND_IMAGE_REPO`**, plus **`AZURE_LOCATION`**, **`AZURE_ENV_AI_SERVICE_LOCATION`** where AI applies, model parameters, optional existing Log Analytics / AI project IDs).
-3. Run **`azd up`** from the directory whose `azure.yaml` points at the correct `infra/` path. For **repo root** + **`infra_basic`**, Bicep updates App Service **`linuxFxVersion`** and **application settings** (secrets, **`VITE_API_BASE_URL`** per frontend, **`ALLOWED_ORIGINS_STR`** per backend). **`hooks.postprovision`** currently runs **only** **[`infra_basic/scripts/cloud_build_acr`](../infra_basic/scripts/cloud_build_acr.ps1)** (build + restart)—**not** data or agent scripts (**§6.2**).
+3. Run **`azd up`** from the directory whose `azure.yaml` points at the correct `infra/` path. For **repo root** + **`infra_basic`**, Bicep updates App Service **`linuxFxVersion`** and **application settings** (secrets, **`VITE_API_BASE_URL`** per frontend, **`ALLOWED_ORIGINS_STR`** per backend). **`hooks.postprovision`** runs **[`infra_basic/scripts/postprovision_all`](../infra_basic/scripts/postprovision_all.ps1)** (**`cloud_build_acr`** then **data + agent** scripts; **§6.2**).
 
 ### 6.2 Post-provision: data and agent scripts (unified root)
 
@@ -467,9 +467,10 @@ Provisioning is **Bicep-driven**. Container images are expected to exist in **Az
 
 **Suggested order:** Run **data_scripts** first (product + policies indexes and seed data); then **agent_scripts** so **`FOUNDRY_*`**-style placeholders in **[`infra_basic/main.bicep`](../infra_basic/main.bicep)** outputs can be filled or copied into backend app settings.
 
-**Manual today:** Repo-root **[`azure.yaml`](../azure.yaml)** does **not** invoke these; run from repo root with **`pwsh`** / **`bash`** after **`azd env`** is selected and **`az`** is logged in. Example:
+**Automation:** Repo-root **[`azure.yaml`](../azure.yaml)** **`hooks.postprovision`** runs **`postprovision_all`** (**`cloud_build_acr`** then these scripts). If hooks fail or you need a partial rerun, from repo root after **`azd env`** is selected and **`az`** is logged in:
 
 ```powershell
+pwsh -File infra_basic/scripts/cloud_build_acr.ps1
 pwsh -File infra/scripts/data_scripts/run_upload_data_scripts.ps1
 pwsh -File infra/scripts/agent_scripts/run_create_agents_scripts.ps1
 ```
@@ -480,7 +481,7 @@ chmod +x infra/scripts/data_scripts/run_upload_data_scripts.sh infra/scripts/age
 ./infra/scripts/agent_scripts/run_create_agents_scripts.sh
 ```
 
-**Gaps before hook automation:** **`run_upload_data_scripts.ps1`** can prompt interactively (**`Read-Host`** / subscription selection); agent scripts resolve **`AZURE_RESOURCE_GROUP`** in some paths while **`azd`** stores **`RESOURCE_GROUP_NAME`**—align env keys or rely on ARM deployment-output fallback (**Next steps**). Legacy outputs **`API_APP_NAME`** / **`API_PID`** refer to the **chat** backend in **`infra_basic`**; use **`ECOMMERCE_API_APP_NAME`** when scripting ecommerce identity RBAC.
+**Operational gaps:** **`run_upload_data_scripts.ps1`** can prompt interactively (**`Read-Host`** / subscription selection); agent scripts resolve **`AZURE_RESOURCE_GROUP`** in some paths while **`azd`** stores **`RESOURCE_GROUP_NAME`**—align env keys or rely on ARM deployment-output fallback (**Next steps**). Legacy outputs **`API_APP_NAME`** / **`API_PID`** refer to the **chat** backend in **`infra_basic`**; use **`ECOMMERCE_API_APP_NAME`** when scripting ecommerce identity RBAC.
 
 ### 6.3 Independent AZD deployments (per app)
 
@@ -703,12 +704,13 @@ If you later move compute to Azure Container Apps, treat that as a **separate mi
 
 **Unified root (`infra.path: infra_basic` + repo [`azure.yaml`](../azure.yaml))**
 
-- [ ] **`azd provision`** completes; **`hooks.postprovision`** **[`infra_basic/scripts/cloud_build_acr`](../infra_basic/scripts/cloud_build_acr.ps1)** (or `.sh`) builds **four** images and restarts **`CHAT_API_APP_NAME`**, **`CHAT_WEB_APP_NAME`**, **`ECOMMERCE_API_APP_NAME`**, **`ECOMMERCE_WEB_APP_NAME`**
+- [ ] **`azd provision`** completes; **`hooks.postprovision`** **[`infra_basic/scripts/postprovision_all`](../infra_basic/scripts/postprovision_all.ps1)** (or `.sh`) runs **`cloud_build_acr`** then **data + agent** scripts; **four** images refresh and **four** web apps restart (**failures:** run **`cloud_build_acr`** / **`postprovision_data_agents`** separately from repo root)
 - [ ] **`az webapp config show`** (or Portal): **four** **`linuxFxVersion`** values **`DOCKER|<acr>/<repo>:<tag>`** match **`AZURE_ENV_IMAGETAG`** / repository names (**`verify_linuxfx`** under each app for single-stack drills)
 - [ ] **`curl "$(azd env get-value CHAT_API_APP_URL)/health"`** and **`curl "$(azd env get-value ECOMMERCE_API_APP_URL)/health"`** return **200**
-- [ ] Hosted UI **View Source**: **`index.html`** references **`runtime-config.js`**; first network request **`/runtime-config.js`** returns **`VITE_API_BASE_URL`** pointing at correct API (**no** production fallback to **`localhost`**)
+- [ ] Chat API app **`$(azd env get-value CHAT_API_APP_NAME)`** has non-empty **`FOUNDRY_CHAT_AGENT`**, **`FOUNDRY_PRODUCT_AGENT`**, **`FOUNDRY_POLICY_AGENT`** (portal or **`az webapp config appsettings list -g "$(azd env get-value RESOURCE_GROUP_NAME)" -n "$(azd env get-value CHAT_API_APP_NAME)" --query "[?name=='FOUNDRY_CHAT_AGENT' || name=='FOUNDRY_PRODUCT_AGENT' || name=='FOUNDRY_POLICY_AGENT']"`**)
+- [ ] Hosted UI **View Source**: **`index.html`** references **`runtime-config.js`**; first network request **`/runtime-config.js`** returns **`VITE_API_BASE_URL`** pointing at correct API (**no** production fallback to **`localhost`** / **`127.0.0.1`**)
 - [ ] Browser DevTools: **CORS** passes for credentialed XHR (**`ALLOWED_ORIGINS_STR`** equals exact frontend **`https://...`** — **no** wildcard **`*`**)
-- [ ] **`§6.2`** data + agent scripts run **after** provisioning (today **manual** until second hook lands); Cosmos/Search/Foundry exercised as needed
+- [ ] **`§6.2`** data + agent steps succeed (**hook** **`postprovision_all`** or manual); Cosmos/Search indexes seeded; Foundry agents created and **`FOUNDRY_*`** populated on chat API
 
 **E-commerce app**
 - [ ] **`azure.yaml`** uses `infra.path` and `hooks.postprovision` (no required `services:` for current model); **standalone** deployments may omit root **`infra_basic`** four-stack layout
@@ -740,6 +742,7 @@ curl -sS "$(azd env get-value CHAT_API_APP_URL)/health"
 curl -sS "$(azd env get-value ECOMMERCE_API_APP_URL)/health"
 curl -sS -o /dev/null -w "%{http_code}" "$(azd env get-value CHAT_WEB_APP_URL)/"
 curl -sS -o /dev/null -w "%{http_code}" "$(azd env get-value ECOMMERCE_WEB_APP_URL)/"
+pwsh -File infra_basic/scripts/cloud_build_acr.ps1
 pwsh -File infra/scripts/data_scripts/run_upload_data_scripts.ps1
 pwsh -File infra/scripts/agent_scripts/run_create_agents_scripts.ps1
 ```
@@ -778,6 +781,8 @@ Use the Azure portal or Application Insights for live metrics and failures; **`a
 4. **Stale or wrong container** — Confirm **`AZURE_ENV_IMAGETAG`**, **`AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT`**, and optional **`AZURE_ENV_FRONTEND_IMAGE_REPO`** / **`AZURE_ENV_BACKEND_IMAGE_REPO`** match **`linuxFxVersion`** (**`infra/scripts/verify_linuxfx.ps1`** or **`.sh`**); restart site or redeploy if settings changed.
 
 5. **CORS failures** — Reconcile **`ALLOWED_ORIGINS_STR`** on the API with the exact browser origin (scheme + host, no trailing slash mismatch). Do not rely on **`*`** when the SPA uses **`withCredentials: true`** / cookies (**§6.6**).
+
+6. **Foundry “required tools … product_agent”** — Chat orchestrator from **`01_create_agents.py`** expects **`product_agent`** and **`policy_agent`** at invocation time. Ensure **`chat-app/backend`** passes both tools (legacy **`POST /api/chat/message`** and **`call_foundry_agent`**); chat API app settings include **`FOUNDRY_PRODUCT_AGENT`**; redeploy **`ccsa-chat-backend`** after code changes.
 
 ---
 

@@ -10,12 +10,12 @@ hooks:
   postprovision:
     windows:
       shell: pwsh
-      run: ./infra_basic/scripts/cloud_build_acr.ps1
+      run: ./infra_basic/scripts/postprovision_all.ps1
       continueOnError: false
       interactive: false
     posix:
       shell: sh
-      run: chmod +x ./infra_basic/scripts/cloud_build_acr.sh && ./infra_basic/scripts/cloud_build_acr.sh
+      run: chmod +x ./infra_basic/scripts/postprovision_all.sh && ./infra_basic/scripts/postprovision_all.sh
       continueOnError: false
       interactive: false
 

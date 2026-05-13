@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -z "${RESOURCE_GROUP_NAME:-}" && -n "${AZURE_RESOURCE_GROUP:-}" ]]; then
+  export RESOURCE_GROUP_NAME="$AZURE_RESOURCE_GROUP"
+fi
+if [[ -z "${AZURE_RESOURCE_GROUP:-}" && -n "${RESOURCE_GROUP_NAME:-}" ]]; then
+  export AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
+fi
 TAG="${AZURE_ENV_IMAGETAG:-latest_v2}"
 REG="${ACR_NAME:?ACR_NAME missing after provision.}"
 RG="${RESOURCE_GROUP_NAME:?RESOURCE_GROUP_NAME missing after provision.}"

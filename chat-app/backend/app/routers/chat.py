@@ -330,6 +330,7 @@ async def send_message_legacy(
 
         ai_project_endpoint = settings.azure_foundry_endpoint
         chat_agent_name = settings.foundry_chat_agent
+        product_agent_name = settings.foundry_product_agent
         policy_agent_name = settings.foundry_policy_agent
 
         if not ai_project_endpoint:
@@ -345,6 +346,7 @@ async def send_message_legacy(
             name
             for value, name in [
                 (chat_agent_name, "foundry_chat_agent"),
+                (product_agent_name, "foundry_product_agent"),
                 (policy_agent_name, "foundry_policy_agent"),
             ]
             if not value
@@ -380,6 +382,7 @@ async def send_message_legacy(
             default_retry_delay = 5  # seconds
             result = None
 
+            product_agent = await provider.get_agent(name=product_agent_name)
             policy_agent = await provider.get_agent(name=policy_agent_name)
 
             for attempt in range(max_retries):
@@ -387,6 +390,7 @@ async def send_message_legacy(
                     retrieved_agent = await provider.get_agent(
                         name=chat_agent_name,
                         tools=[
+                            product_agent.as_tool(name="product_agent"),
                             policy_agent.as_tool(name="policy_agent"),
                         ],
                     )

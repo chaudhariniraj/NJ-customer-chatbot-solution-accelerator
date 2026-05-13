@@ -5,6 +5,14 @@ param(
     [string]$resource_group
 )
 
+function Test-PostprovisionNonInteractive {
+    if ($env:POSTPROVISION_NON_INTERACTIVE -eq '1') { return $true }
+    if ($env:CI -eq 'true') { return $true }
+    if ($env:GITHUB_ACTIONS -eq 'true') { return $true }
+    if ($env:TF_BUILD -eq 'True') { return $true }
+    return $false
+}
+
 # Variables
 $solutionName = ""
 $aiFoundryName = ""
@@ -28,6 +36,11 @@ function Test-AzdInstalled {
     }
 }
 
+function Test-AzEnvValueOk {
+    param([string]$value)
+    return ($null -ne $value -and $value.Trim().Length -gt 0 -and $value -notmatch '^\s*ERROR:')
+}
+
 function Get-ValuesFromAzdEnv {
     if (-not (Test-AzdInstalled)) {
         Write-Host "Error: Azure Developer CLI is not installed."
@@ -42,6 +55,9 @@ function Get-ValuesFromAzdEnv {
     $script:backend_app_uid = $(azd env get-value API_UID)
     $script:app_service = $(azd env get-value API_APP_NAME)
     $script:resource_group = $(azd env get-value RESOURCE_GROUP_NAME)
+    if (-not (Test-AzEnvValueOk $script:resource_group)) {
+        $script:resource_group = $(azd env get-value AZURE_RESOURCE_GROUP)
+    }
     $script:ai_search_endpoint = $(azd env get-value AZURE_AI_SEARCH_ENDPOINT)
     $script:azure_openai_endpoint = $(azd env get-value AZURE_OPENAI_ENDPOINT)
     $script:embedding_model_name = $(azd env get-value AZURE_OPENAI_EMBEDDING_MODEL)
@@ -49,9 +65,8 @@ function Get-ValuesFromAzdEnv {
     $script:aiSearchResourceId = $(azd env get-value AI_SEARCH_SERVICE_RESOURCE_ID)
     $script:cosmosdb_account = $(azd env get-value AZURE_COSMOSDB_ACCOUNT)
     
-    # Validate that we got all required values
-    if (-not $script:resource_group -or -not $script:ai_search_endpoint -or -not $script:azure_openai_endpoint -or -not $script:cosmosdb_account) {
-        Write-Host "Error: Could not retrieve all required values from azd environment."
+    if (-not (Test-AzEnvValueOk $script:resource_group) -or -not (Test-AzEnvValueOk $script:ai_search_endpoint) -or -not (Test-AzEnvValueOk $script:azure_openai_endpoint) -or -not (Test-AzEnvValueOk $script:cosmosdb_account) -or -not (Test-AzEnvValueOk $script:aiSearchResourceId)) {
+        Write-Host "Error: Could not retrieve all required values from azd environment (provision this stack or run with -resource_group and deployment outputs)."
         return $false
     }
     
@@ -154,45 +169,53 @@ $currentSubscriptionName = az account show --query name -o tsv
 
 if ($currentSubscriptionId -ne $azSubscriptionId -and $azSubscriptionId) {
     Write-Host "Current selected subscription is $currentSubscriptionName ( $currentSubscriptionId )."
-    $confirmation = Read-Host "Do you want to continue with this subscription?(y/n)"
-    if ($confirmation -notin @("y", "Y")) {
-        Write-Host "Fetching available subscriptions..."
-        $availableSubscriptions = az account list --query "[?state=='Enabled'].[name,id]" --output json | ConvertFrom-Json
-        
-        do {
-            Write-Host ""
-            Write-Host "Available Subscriptions:"
-            Write-Host "========================"
-            for ($i = 0; $i -lt $availableSubscriptions.Count; $i++) {
-                $index = $i + 1
-                Write-Host "$index. $($availableSubscriptions[$i][0]) ( $($availableSubscriptions[$i][1]) )"
-            }
-            Write-Host "========================"
-            Write-Host ""
-            
-            $subscriptionIndex = Read-Host "Enter the number of the subscription (1-$($availableSubscriptions.Count)) to use"
-            
-            if ($subscriptionIndex -match '^\d+$' -and [int]$subscriptionIndex -ge 1 -and [int]$subscriptionIndex -le $availableSubscriptions.Count) {
-                $selectedIndex = [int]$subscriptionIndex - 1
-                $selectedSubscriptionName = $availableSubscriptions[$selectedIndex][0]
-                $selectedSubscriptionId = $availableSubscriptions[$selectedIndex][1]
-                
-                try {
-                    az account set --subscription $selectedSubscriptionId
-                    Write-Host "Switched to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )"
-                    $azSubscriptionId = $selectedSubscriptionId
-                    break
-                } catch {
-                    Write-Host "Failed to switch to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )."
-                }
-            } else {
-                Write-Host "Invalid selection. Please try again."
-            }
-        } while ($true)
+    if (Test-PostprovisionNonInteractive) {
+        Write-Host "Non-interactive: switching subscription to $azSubscriptionId"
+        az account set --subscription $azSubscriptionId
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set Azure subscription to $azSubscriptionId"
+        }
     } else {
-        Write-Host "Proceeding with the current subscription: $currentSubscriptionName ( $currentSubscriptionId )"
-        az account set --subscription $currentSubscriptionId
-        $azSubscriptionId = $currentSubscriptionId
+        $confirmation = Read-Host "Do you want to continue with this subscription?(y/n)"
+        if ($confirmation -notin @("y", "Y")) {
+            Write-Host "Fetching available subscriptions..."
+            $availableSubscriptions = az account list --query "[?state=='Enabled'].[name,id]" --output json | ConvertFrom-Json
+            
+            do {
+                Write-Host ""
+                Write-Host "Available Subscriptions:"
+                Write-Host "========================"
+                for ($i = 0; $i -lt $availableSubscriptions.Count; $i++) {
+                    $index = $i + 1
+                    Write-Host "$index. $($availableSubscriptions[$i][0]) ( $($availableSubscriptions[$i][1]) )"
+                }
+                Write-Host "========================"
+                Write-Host ""
+                
+                $subscriptionIndex = Read-Host "Enter the number of the subscription (1-$($availableSubscriptions.Count)) to use"
+                
+                if ($subscriptionIndex -match '^\d+$' -and [int]$subscriptionIndex -ge 1 -and [int]$subscriptionIndex -le $availableSubscriptions.Count) {
+                    $selectedIndex = [int]$subscriptionIndex - 1
+                    $selectedSubscriptionName = $availableSubscriptions[$selectedIndex][0]
+                    $selectedSubscriptionId = $availableSubscriptions[$selectedIndex][1]
+                    
+                    try {
+                        az account set --subscription $selectedSubscriptionId
+                        Write-Host "Switched to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )"
+                        $azSubscriptionId = $selectedSubscriptionId
+                        break
+                    } catch {
+                        Write-Host "Failed to switch to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )."
+                    }
+                } else {
+                    Write-Host "Invalid selection. Please try again."
+                }
+            } while ($true)
+        } else {
+            Write-Host "Proceeding with the current subscription: $currentSubscriptionName ( $currentSubscriptionId )"
+            az account set --subscription $currentSubscriptionId
+            $azSubscriptionId = $currentSubscriptionId
+        }
     }
 } else {
     Write-Host "Proceeding with the subscription: $currentSubscriptionName ( $currentSubscriptionId )"

@@ -22,6 +22,16 @@ $searchEndpoint = ""
 $azSubscriptionId = ""
 
 $ErrorActionPreference = "Stop"
+$script:agentCreationFailed = $false
+
+function Test-PostprovisionNonInteractive {
+    if ($env:POSTPROVISION_NON_INTERACTIVE -eq '1') { return $true }
+    if ($env:CI -eq 'true') { return $true }
+    if ($env:GITHUB_ACTIONS -eq 'true') { return $true }
+    if ($env:TF_BUILD -eq 'True') { return $true }
+    return $false
+}
+
 Write-Host "Started the agent creation script setup..."
 
 function Test-AzdInstalled {
@@ -47,7 +57,11 @@ function Get-ValuesFromAzdEnv {
         $script:gptModelName = $(azd env get-value AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME 2>$null)
         $script:aiFoundryResourceId = $(azd env get-value AI_FOUNDRY_RESOURCE_ID 2>$null)
         $script:apiAppName = $(azd env get-value API_APP_NAME 2>$null)
-        $script:resourceGroup = $(azd env get-value AZURE_RESOURCE_GROUP 2>$null)
+        $rgFromAzd = $(azd env get-value AZURE_RESOURCE_GROUP 2>$null)
+        if (-not $rgFromAzd -or $rgFromAzd -match "ERROR:") {
+            $rgFromAzd = $(azd env get-value RESOURCE_GROUP_NAME 2>$null)
+        }
+        $script:resourceGroup = $rgFromAzd
         $script:searchEndpoint = $(azd env get-value AZURE_AI_SEARCH_ENDPOINT 2>$null)
     } catch {
         Write-Host "Error: Failed to retrieve values from azd environment."
@@ -163,45 +177,53 @@ $currentSubscriptionName = az account show --query name -o tsv
 
 if ($currentSubscriptionId -ne $azSubscriptionId -and $azSubscriptionId) {
     Write-Host "Current selected subscription is $currentSubscriptionName ( $currentSubscriptionId )."
-    $confirmation = Read-Host "Do you want to continue with this subscription?(y/n)"
-    if ($confirmation -notin @("y", "Y")) {
-        Write-Host "Fetching available subscriptions..."
-        $availableSubscriptions = az account list --query "[?state=='Enabled'].[name,id]" --output json | ConvertFrom-Json
-        
-        do {
-            Write-Host ""
-            Write-Host "Available Subscriptions:"
-            Write-Host "========================"
-            for ($i = 0; $i -lt $availableSubscriptions.Count; $i++) {
-                $index = $i + 1
-                Write-Host "$index. $($availableSubscriptions[$i][0]) ( $($availableSubscriptions[$i][1]) )"
-            }
-            Write-Host "========================"
-            Write-Host ""
-            
-            $subscriptionIndex = Read-Host "Enter the number of the subscription (1-$($availableSubscriptions.Count)) to use"
-            
-            if ($subscriptionIndex -match '^\d+$' -and [int]$subscriptionIndex -ge 1 -and [int]$subscriptionIndex -le $availableSubscriptions.Count) {
-                $selectedIndex = [int]$subscriptionIndex - 1
-                $selectedSubscriptionName = $availableSubscriptions[$selectedIndex][0]
-                $selectedSubscriptionId = $availableSubscriptions[$selectedIndex][1]
-                
-                try {
-                    az account set --subscription $selectedSubscriptionId
-                    Write-Host "Switched to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )"
-                    $azSubscriptionId = $selectedSubscriptionId
-                    break
-                } catch {
-                    Write-Host "Failed to switch to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )."
-                }
-            } else {
-                Write-Host "Invalid selection. Please try again."
-            }
-        } while ($true)
+    if (Test-PostprovisionNonInteractive) {
+        Write-Host "Non-interactive: switching subscription to $azSubscriptionId"
+        az account set --subscription $azSubscriptionId
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set Azure subscription to $azSubscriptionId"
+        }
     } else {
-        Write-Host "Proceeding with the current subscription: $currentSubscriptionName ( $currentSubscriptionId )"
-        az account set --subscription $currentSubscriptionId
-        $azSubscriptionId = $currentSubscriptionId
+        $confirmation = Read-Host "Do you want to continue with this subscription?(y/n)"
+        if ($confirmation -notin @("y", "Y")) {
+            Write-Host "Fetching available subscriptions..."
+            $availableSubscriptions = az account list --query "[?state=='Enabled'].[name,id]" --output json | ConvertFrom-Json
+            
+            do {
+                Write-Host ""
+                Write-Host "Available Subscriptions:"
+                Write-Host "========================"
+                for ($i = 0; $i -lt $availableSubscriptions.Count; $i++) {
+                    $index = $i + 1
+                    Write-Host "$index. $($availableSubscriptions[$i][0]) ( $($availableSubscriptions[$i][1]) )"
+                }
+                Write-Host "========================"
+                Write-Host ""
+                
+                $subscriptionIndex = Read-Host "Enter the number of the subscription (1-$($availableSubscriptions.Count)) to use"
+                
+                if ($subscriptionIndex -match '^\d+$' -and [int]$subscriptionIndex -ge 1 -and [int]$subscriptionIndex -le $availableSubscriptions.Count) {
+                    $selectedIndex = [int]$subscriptionIndex - 1
+                    $selectedSubscriptionName = $availableSubscriptions[$selectedIndex][0]
+                    $selectedSubscriptionId = $availableSubscriptions[$selectedIndex][1]
+                    
+                    try {
+                        az account set --subscription $selectedSubscriptionId
+                        Write-Host "Switched to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )"
+                        $azSubscriptionId = $selectedSubscriptionId
+                        break
+                    } catch {
+                        Write-Host "Failed to switch to subscription: $selectedSubscriptionName ( $selectedSubscriptionId )."
+                    }
+                } else {
+                    Write-Host "Invalid selection. Please try again."
+                }
+            } while ($true)
+        } else {
+            Write-Host "Proceeding with the current subscription: $currentSubscriptionName ( $currentSubscriptionId )"
+            az account set --subscription $currentSubscriptionId
+            $azSubscriptionId = $currentSubscriptionId
+        }
     }
 } else {
     Write-Host "Proceeding with the subscription: $currentSubscriptionName ( $currentSubscriptionId )"
@@ -211,13 +233,13 @@ if ($currentSubscriptionId -ne $azSubscriptionId -and $azSubscriptionId) {
 
 # Get configuration values based on strategy
 if (-not $resourceGroup) {
-    # No resource group provided - use azd env
     if (-not (Get-ValuesFromAzdEnv)) {
         Write-Host "Failed to get values from azd environment."
         Write-Host "If you want to use deployment outputs instead, please provide the resource group name as an argument."
         Write-Host "Usage: .\run_create_agents_scripts.ps1 -resourceGroup <ResourceGroupName>"
         exit 1
     }
+    $resourceGroup = $script:resourceGroup
 } else {
     # Resource group provided - use deployment outputs
     Write-Host "Resource group provided: $resourceGroup"
@@ -319,25 +341,24 @@ if ($originalFoundryPublicAccess -eq "Disabled") {
 # Execute the Python scripts within try/finally to ensure network settings are restored on error
 try {
     Write-Host "Running Python agents creation script..."
-    $python_output = python infra/scripts/agent_scripts/01_create_agents.py --ai_project_endpoint="$projectEndpoint" --solution_name="$solutionName" --gpt_model_name="$gptModelName" --ai_search_endpoint="$searchEndpoint"
-
+    $pythonLines = @(python infra/scripts/agent_scripts/01_create_agents.py --ai_project_endpoint="$projectEndpoint" --solution_name="$solutionName" --gpt_model_name="$gptModelName" --ai_search_endpoint="$searchEndpoint" 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "Python agent creation script failed with exit code $LASTEXITCODE"
     }
 
-    # Parse the output to extract agent names
     $chatAgentName = ""
     $productAgentName = ""
     $policyAgentName = ""
 
-    foreach ($line in $python_output) {
-        if ($line -match "^chatAgentName=(.+)$") {
+    foreach ($line in $pythonLines) {
+        $lineStr = [string]$line
+        if ($lineStr -match "^chatAgentName=(.+)$") {
             $chatAgentName = $Matches[1]
         }
-        elseif ($line -match "^productAgentName=(.+)$") {
+        elseif ($lineStr -match "^productAgentName=(.+)$") {
             $productAgentName = $Matches[1]
         }
-        elseif ($line -match "^policyAgentName=(.+)$") {
+        elseif ($lineStr -match "^policyAgentName=(.+)$") {
             $policyAgentName = $Matches[1]
         }
     }

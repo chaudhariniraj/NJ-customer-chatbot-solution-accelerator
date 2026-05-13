@@ -257,7 +257,7 @@ module chat_backend_docker 'deploy_backend_docker.bicep' = {
       DUMMY_TEST: 'True'
       SOLUTION_NAME: solutionPrefix
       APP_ENV: 'Prod'
-      ALLOWED_ORIGINS_STR: 'https://${chatFeWebAppName}.azurewebsites.net'
+      ALLOWED_ORIGINS_STR: 'https://${chatFeWebAppName}.azurewebsites.net,https://${ecomFeWebAppName}.azurewebsites.net'
       AZURE_FOUNDRY_ENDPOINT: aifoundry.outputs.projectEndpoint
       AZURE_SEARCH_ENDPOINT: aifoundry.outputs.aiSearchTarget
       AZURE_SEARCH_INDEX: 'policies'
@@ -380,6 +380,8 @@ module ecommerce_frontend_docker 'deploy_frontend_docker.bicep' = {
     appSettings: {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: ecommerce_backend_docker.outputs.appUrl
+      VITE_CHAT_WIDGET_ORIGIN: 'https://${chatFeWebAppName}.azurewebsites.net'
+      VITE_CHAT_API_BASE_URL: chat_backend_docker.outputs.appUrl
     }
   }
   scope: resourceGroup(resourceGroup().name)
@@ -443,6 +445,8 @@ resource acrPullEcommerceFrontend 'Microsoft.Authorization/roleAssignments@2022-
 
 output SOLUTION_NAME string = solutionPrefix
 output RESOURCE_GROUP_NAME string = resourceGroup().name
+output AZURE_RESOURCE_GROUP string = resourceGroup().name
+output AZURE_SUBSCRIPTION_ID string = subscription().subscriptionId
 output RESOURCE_GROUP_LOCATION string = solutionLocation
 // output AZURE_CONTENT_UNDERSTANDING_LOCATION string = contentUnderstandingLocation
 output AZURE_SECONDARY_LOCATION string = secondaryLocation

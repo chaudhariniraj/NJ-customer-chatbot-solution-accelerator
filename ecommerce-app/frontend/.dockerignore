@@ -3,3 +3,6 @@ node_modules
 *.md
 README*
 dist
+.env
+.env.*
+!.env.example

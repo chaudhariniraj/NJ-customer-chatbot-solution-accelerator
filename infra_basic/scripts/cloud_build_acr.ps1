@@ -1,4 +1,10 @@
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($env:RESOURCE_GROUP_NAME) -and -not [string]::IsNullOrWhiteSpace($env:AZURE_RESOURCE_GROUP)) {
+    $env:RESOURCE_GROUP_NAME = $env:AZURE_RESOURCE_GROUP
+}
+if ([string]::IsNullOrWhiteSpace($env:AZURE_RESOURCE_GROUP) -and -not [string]::IsNullOrWhiteSpace($env:RESOURCE_GROUP_NAME)) {
+    $env:AZURE_RESOURCE_GROUP = $env:RESOURCE_GROUP_NAME
+}
 $tag = $env:AZURE_ENV_IMAGETAG
 if ([string]::IsNullOrWhiteSpace($tag)) { $tag = 'latest_v2' }
 $reg = $env:ACR_NAME

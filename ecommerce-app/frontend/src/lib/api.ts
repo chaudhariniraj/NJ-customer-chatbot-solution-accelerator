@@ -1,39 +1,65 @@
 import axios from 'axios';
 
+function isLoopbackApiUrl(url: string): boolean {
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(url.trim());
+}
+
+function inferEcomAzureApiBase(hostname: string): string {
+  if (!hostname.endsWith('.azurewebsites.net')) return '';
+  if (!hostname.startsWith('app-ecom-')) return '';
+  return `https://api-ecom-${hostname.slice('app-ecom-'.length)}`;
+}
+
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     const fromRuntime = String(
       (window as any).__RUNTIME_CONFIG__?.VITE_API_BASE_URL ?? ''
     ).trim();
     if (fromRuntime) return fromRuntime;
+    const host = window.location.hostname;
+    const fromBuild = String(import.meta.env.VITE_API_BASE_URL ?? '').trim();
+    const onAzureFe =
+      host.endsWith('.azurewebsites.net') &&
+      host !== 'localhost' &&
+      host !== '127.0.0.1';
+    if (fromBuild && !(onAzureFe && isLoopbackApiUrl(fromBuild))) {
+      return fromBuild;
+    }
+    const inferred = inferEcomAzureApiBase(host);
+    if (inferred) return inferred;
+    if (import.meta.env.DEV) {
+      return fromBuild || 'http://localhost:8000';
+    }
+    return '';
   }
   const fromBuild = String(import.meta.env.VITE_API_BASE_URL ?? '').trim();
   if (fromBuild) return fromBuild;
   return import.meta.env.DEV ? 'http://localhost:8000' : '';
 };
 
-const API_BASE_URL = getApiBaseUrl();
-
 export const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: '',
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 60000, // 60 seconds to handle cold starts
-  withCredentials: true, // This is crucial for Easy Auth cookies
+  timeout: 60000,
+  withCredentials: true,
 });
 
-// Store Easy Auth headers globally
 let cachedEasyAuthHeaders: Record<string, string> | null = null;
 
 export const setEasyAuthHeaders = (headers: Record<string, string> | null) => {
   cachedEasyAuthHeaders = headers;
 };
 
-// Add request interceptor to handle authentication
+api.interceptors.request.use((config) => {
+  const base = getApiBaseUrl();
+  config.baseURL = base || '';
+  return config;
+});
+
 api.interceptors.request.use(
   (config) => {
-    // Add cached Easy Auth headers to all requests
     if (cachedEasyAuthHeaders && config.headers) {
       Object.keys(cachedEasyAuthHeaders).forEach(key => {
         if (config.headers) {

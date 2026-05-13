@@ -1,4 +1,5 @@
 import { api, setEasyAuthHeaders } from '@/lib/api';
+import { getEmbedAuthBaseUrl } from '@/lib/embedContext';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 export interface User {
@@ -31,7 +32,9 @@ const CLAIM_TYPE_MAP: Record<string, string> = {
 
 async function fetchEasyAuthHeaders(): Promise<Record<string, string> | null> {
   try {
-    const response = await fetch('/.auth/me', { 
+    const authBase = getEmbedAuthBaseUrl();
+    const meUrl = authBase ? `${authBase}/.auth/me` : '/.auth/me';
+    const response = await fetch(meUrl, { 
       credentials: 'include',
       redirect: 'manual'  // Don't follow redirects - prevents CORS error on unauthenticated redirect
     });
@@ -134,16 +137,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = () => {
-    // Use frontend's Easy Auth login endpoint
-    window.location.href = '/.auth/login/aad';
+    const authBase = getEmbedAuthBaseUrl();
+    const prefix = authBase ? `${authBase}` : '';
+    window.location.href = `${prefix}/.auth/login/aad`;
   };
 
   const logout = () => {
-    // Clear cached auth headers
     setEasyAuthHeaders(null);
-    
-    // Use frontend's Easy Auth logout endpoint
-    window.location.href = '/.auth/logout';
+    const authBase = getEmbedAuthBaseUrl();
+    const prefix = authBase ? `${authBase}` : '';
+    window.location.href = `${prefix}/.auth/logout`;
   };
 
   const value: AuthContextType = {

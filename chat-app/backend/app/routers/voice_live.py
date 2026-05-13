@@ -93,6 +93,7 @@ async def _call_foundry_agent(question: str) -> str:
         question=question,
         foundry_endpoint=settings.azure_foundry_endpoint or "",
         chat_agent_name=settings.foundry_chat_agent,
+        product_agent_name=settings.foundry_product_agent,
         policy_agent_name=settings.foundry_policy_agent,
         azure_client_id=client_id,
     )

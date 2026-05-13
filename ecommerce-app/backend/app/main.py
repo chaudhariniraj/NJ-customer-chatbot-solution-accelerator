@@ -12,6 +12,7 @@ except ImportError:
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Configure logging BEFORE importing other modules
 # This ensures all loggers created in imported modules inherit this configuration
@@ -63,14 +64,27 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configure CORS
+_cors_origins = frozenset(settings.allowed_origins)
+
+
+class _FixCredentialedCorsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        origin = request.headers.get("origin")
+        if origin and origin in _cors_origins:
+            response.headers["access-control-allow-origin"] = origin
+            response.headers["access-control-allow-credentials"] = "true"
+        return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=list(_cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(_FixCredentialedCorsMiddleware)
 
 # Include routers
 app.include_router(auth.router)

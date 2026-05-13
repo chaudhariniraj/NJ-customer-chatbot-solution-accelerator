@@ -8,6 +8,7 @@ async def call_foundry_agent(
     question: str,
     foundry_endpoint: str,
     chat_agent_name: str,
+    product_agent_name: str,
     policy_agent_name: str,
     azure_client_id: Optional[str] = None,
 ) -> str:
@@ -23,7 +24,7 @@ async def call_foundry_agent(
         if not foundry_endpoint:
             return "Foundry endpoint not configured."
 
-        if not all([chat_agent_name, policy_agent_name]):
+        if not all([chat_agent_name, product_agent_name, policy_agent_name]):
             return "Foundry agents not fully configured."
 
         credential = await get_azure_credential_async(client_id=azure_client_id)
@@ -36,11 +37,13 @@ async def call_foundry_agent(
                 credential=credential,
             ) as provider,
         ):
+            product_agent = await provider.get_agent(name=product_agent_name)
             policy_agent = await provider.get_agent(name=policy_agent_name)
 
             retrieved_agent = await provider.get_agent(
                 name=chat_agent_name,
                 tools=[
+                    product_agent.as_tool(name="product_agent"),
                     policy_agent.as_tool(name="policy_agent"),
                 ],
             )
