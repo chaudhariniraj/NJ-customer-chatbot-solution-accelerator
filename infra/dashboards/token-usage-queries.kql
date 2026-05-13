@@ -1,0 +1,230 @@
+// =============================================================================
+// Token Usage Dashboard Queries — BYOCC Customer Chatbot
+// =============================================================================
+// Source events (Application Insights `customEvents` table):
+//   * LLM_Token_Usage_Summary  — one event per request (aggregated totals)
+//   * LLM_Agent_Token_Usage    — one event per agent involved in a request
+//   * LLM_Model_Token_Usage    — one event per model deployment
+//
+// All token counts are sent as strings in `customDimensions`; cast with toint().
+// Emitted by: src/api/app/utils/token_usage_utils.py
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// 1. Overall token usage summary (last 24 hours)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(24h)
+| where name == "LLM_Token_Usage_Summary"
+| extend
+    input_tokens  = toint(customDimensions.total_input_tokens),
+    output_tokens = toint(customDimensions.total_output_tokens),
+    total_tokens  = toint(customDimensions.total_tokens)
+| summarize
+    Requests          = count(),
+    TotalInputTokens  = sum(input_tokens),
+    TotalOutputTokens = sum(output_tokens),
+    TotalTokens       = sum(total_tokens),
+    AvgTokensPerReq   = avg(total_tokens)
+
+
+// -----------------------------------------------------------------------------
+// 2. Token usage per agent (last 7 days)
+//
+// NOTE: `LLM_Agent_Token_Usage` is emitted once per agent that participated in
+// a request. The SDK aggregates tool-agent usage into the parent response, so
+// every row carries the SAME totals. Filter by `role` to avoid double-counting:
+//   * role == "orchestrator" → authoritative totals for the request
+//   * role == "tool"         → which sub-agents ran + how often (invocations)
+// -----------------------------------------------------------------------------
+
+// 2a. Authoritative request totals (orchestrator only — no double counting)
+customEvents
+| where timestamp > ago(7d)
+| where name == "LLM_Agent_Token_Usage"
+| where tostring(customDimensions.role) == "orchestrator"
+| extend
+    agent_name    = tostring(customDimensions.agent_name),
+    input_tokens  = toint(customDimensions.input_tokens),
+    output_tokens = toint(customDimensions.output_tokens),
+    total_tokens  = toint(customDimensions.total_tokens)
+| summarize
+    Requests     = count(),
+    InputTokens  = sum(input_tokens),
+    OutputTokens = sum(output_tokens),
+    TotalTokens  = sum(total_tokens)
+    by agent_name
+| order by TotalTokens desc
+
+
+// 2b. Sub-agent (tool) invocations — how often each tool agent was called
+customEvents
+| where timestamp > ago(7d)
+| where name == "LLM_Agent_Token_Usage"
+| where tostring(customDimensions.role) == "tool"
+| extend
+    agent_name         = tostring(customDimensions.agent_name),
+    primary_agent_name = tostring(customDimensions.primary_agent_name)
+| summarize Invocations = count() by agent_name, primary_agent_name
+| order by Invocations desc
+
+
+// -----------------------------------------------------------------------------
+// 3. Token usage per model deployment (last 7 days)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(7d)
+| where name == "LLM_Model_Token_Usage"
+| extend
+    model_name    = tostring(customDimensions.model_deployment_name),
+    input_tokens  = toint(customDimensions.input_tokens),
+    output_tokens = toint(customDimensions.output_tokens),
+    total_tokens  = toint(customDimensions.total_tokens)
+| summarize
+    Calls        = count(),
+    InputTokens  = sum(input_tokens),
+    OutputTokens = sum(output_tokens),
+    TotalTokens  = sum(total_tokens)
+    by model_name
+| order by TotalTokens desc
+
+
+// -----------------------------------------------------------------------------
+// 4. Top users by token consumption (last 30 days)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(30d)
+| where name == "LLM_Token_Usage_Summary"
+| extend
+    user_id      = tostring(customDimensions.user_id),
+    total_tokens = toint(customDimensions.total_tokens)
+| where isnotempty(user_id)
+| summarize
+    Requests    = count(),
+    TotalTokens = sum(total_tokens)
+    by user_id
+| order by TotalTokens desc
+| take 25
+
+
+// -----------------------------------------------------------------------------
+// 5. Hourly token usage trend (area chart, last 24h)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(24h)
+| where name == "LLM_Token_Usage_Summary"
+| extend
+    input_tokens  = toint(customDimensions.total_input_tokens),
+    output_tokens = toint(customDimensions.total_output_tokens)
+| summarize
+    InputTokens  = sum(input_tokens),
+    OutputTokens = sum(output_tokens)
+    by bin(timestamp, 1h)
+| order by timestamp asc
+| render areachart
+
+
+// -----------------------------------------------------------------------------
+// 6. Token-usage distribution per request (percentiles, last 7 days)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(7d)
+| where name == "LLM_Token_Usage_Summary"
+| extend total_tokens = toint(customDimensions.total_tokens)
+| summarize
+    p50 = percentile(total_tokens, 50),
+    p90 = percentile(total_tokens, 90),
+    p95 = percentile(total_tokens, 95),
+    p99 = percentile(total_tokens, 99),
+    max = max(total_tokens)
+
+
+// -----------------------------------------------------------------------------
+// 7. Estimated cost per model — gpt-4o-mini pricing ($0.15 / $0.60 per 1M tokens)
+// -----------------------------------------------------------------------------
+// NOTE: adjust the rates below if you change the deployed model SKU.
+let InputRatePerToken  = 0.00000015;   // $0.15 / 1,000,000
+let OutputRatePerToken = 0.00000060;   // $0.60 / 1,000,000
+customEvents
+| where timestamp > ago(30d)
+| where name == "LLM_Model_Token_Usage"
+| extend
+    model_name    = tostring(customDimensions.model_deployment_name),
+    input_tokens  = toint(customDimensions.input_tokens),
+    output_tokens = toint(customDimensions.output_tokens)
+| summarize
+    InputTokens  = sum(input_tokens),
+    OutputTokens = sum(output_tokens)
+    by model_name
+| extend EstimatedCostUSD =
+    round(InputTokens * InputRatePerToken + OutputTokens * OutputRatePerToken, 4)
+| order by EstimatedCostUSD desc
+
+
+// -----------------------------------------------------------------------------
+// 8. Daily cost trend (last 30 days)
+// -----------------------------------------------------------------------------
+let InputRatePerToken  = 0.00000015;
+let OutputRatePerToken = 0.00000060;
+customEvents
+| where timestamp > ago(30d)
+| where name == "LLM_Model_Token_Usage"
+| extend
+    input_tokens  = toint(customDimensions.input_tokens),
+    output_tokens = toint(customDimensions.output_tokens)
+| summarize
+    InputTokens  = sum(input_tokens),
+    OutputTokens = sum(output_tokens)
+    by bin(timestamp, 1d)
+| extend EstimatedCostUSD =
+    round(InputTokens * InputRatePerToken + OutputTokens * OutputRatePerToken, 4)
+| order by timestamp asc
+| render columnchart
+
+
+// -----------------------------------------------------------------------------
+// 9. Agent ↔ model attribution (which model each agent invoked, last 7 days)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(7d)
+| where name == "LLM_Agent_Token_Usage"
+| extend
+    agent_name = tostring(customDimensions.agent_name),
+    model_name = tostring(customDimensions.model_deployment_name),
+    total_tokens = toint(customDimensions.total_tokens)
+| summarize Calls = count(), TotalTokens = sum(total_tokens) by agent_name, model_name
+| order by TotalTokens desc
+
+
+// -----------------------------------------------------------------------------
+// 10. Agent token-usage share (pie, last 24h)
+// -----------------------------------------------------------------------------
+customEvents
+| where timestamp > ago(24h)
+| where name == "LLM_Agent_Token_Usage"
+| extend
+    agent_name   = tostring(customDimensions.agent_name),
+    total_tokens = toint(customDimensions.total_tokens)
+| summarize TotalTokens = sum(total_tokens) by agent_name
+| render piechart
+
+
+// -----------------------------------------------------------------------------
+// 11. OpenTelemetry cross-check — token usage from `dependencies` (gen_ai.*)
+// -----------------------------------------------------------------------------
+// Useful for validating that our custom events agree with auto-instrumented
+// OpenTelemetry traces emitted by the agent_framework / Azure AI SDKs.
+dependencies
+| where timestamp > ago(24h)
+| where isnotempty(customDimensions["gen_ai.usage.input_tokens"])
+| extend
+    model         = tostring(customDimensions["gen_ai.request.model"]),
+    input_tokens  = toint(customDimensions["gen_ai.usage.input_tokens"]),
+    output_tokens = toint(customDimensions["gen_ai.usage.output_tokens"])
+| summarize
+    Calls        = count(),
+    InputTokens  = sum(input_tokens),
+    OutputTokens = sum(output_tokens)
+    by model
+| order by InputTokens + OutputTokens desc

@@ -86,7 +86,7 @@ GROUNDING_INSTRUCTIONS = (
 )
 
 
-async def _call_foundry_agent(question: str) -> str:
+async def _call_foundry_agent(question: str, *, user_id: Optional[str] = None, session_id: Optional[str] = None) -> str:
     """Delegate to foundry_agent_utils."""
     client_id = str(settings.azure_client_id) if settings.azure_client_id else None
     return await call_foundry_agent(
@@ -96,6 +96,9 @@ async def _call_foundry_agent(question: str) -> str:
         product_agent_name=settings.foundry_product_agent,
         policy_agent_name=settings.foundry_policy_agent,
         azure_client_id=client_id,
+        user_id=user_id,
+        session_id=session_id,
+        model_deployment_name=settings.azure_openai_deployment_name,
     )
 
 
@@ -367,7 +370,13 @@ class VoiceLiveHandler:
                 question = args.get("question", "")
                 if name == "ask_customer_service":
                     # Run Foundry agent with keep-alive pings to prevent WS timeout
-                    agent_task = asyncio.create_task(_call_foundry_agent(question))
+                    agent_task = asyncio.create_task(
+                        _call_foundry_agent(
+                            question,
+                            user_id=self.client_id,
+                            session_id=self.client_id,
+                        )
+                    )
                     while not agent_task.done():
                         await asyncio.sleep(2)
                         if not agent_task.done():
