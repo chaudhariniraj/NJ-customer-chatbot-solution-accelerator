@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.42.1.51946",
-      "templateHash": "11387055216723929134"
+      "version": "0.43.8.12551",
+      "templateHash": "15254096639975874843"
     }
   },
   "parameters": {
@@ -4420,8 +4420,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "14206227996098979620"
+              "version": "0.43.8.12551",
+              "templateHash": "3334983351757312195"
             }
           },
           "definitions": {
@@ -9518,10 +9518,10 @@
                   {
                     "name": "SecurityAuditEvents",
                     "streams": [
-                      "Microsoft-WindowsEvent"
+                      "Microsoft-Event"
                     ],
                     "xPathQueries": [
-                      "Security!*[System[(EventID=4624 or EventID=4625)]]"
+                      "Security!*[System[(band(Keywords,13510798882111488)) and (EventID != 4624)]]"
                     ]
                   }
                 ]
@@ -9544,6 +9544,16 @@
                   ],
                   "transformKql": "source",
                   "outputStream": "Microsoft-Perf"
+                },
+                {
+                  "streams": [
+                    "Microsoft-Event"
+                  ],
+                  "destinations": [
+                    "la--1264800308"
+                  ],
+                  "transformKql": "source",
+                  "outputStream": "Microsoft-Event"
                 }
               ]
             }
@@ -23733,8 +23743,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "17764186322048334660"
+              "version": "0.43.8.12551",
+              "templateHash": "5288388528788440524"
             }
           },
           "definitions": {
@@ -24164,6 +24174,14 @@
           },
           "diagnosticSettings": "[if(parameters('enableMonitoring'), createObject('value', createArray(createObject('workspaceResourceId', if(variables('useExistingLogAnalytics'), parameters('existingLogAnalyticsWorkspaceId'), reference('logAnalyticsWorkspace').outputs.resourceId.value)))), createObject('value', null()))]",
           "publicNetworkAccess": "[if(parameters('enablePrivateNetworking'), createObject('value', 'Disabled'), createObject('value', 'Enabled'))]",
+          "restrictOutboundNetworkAccess": {
+            "value": true
+          },
+          "allowedFqdnList": {
+            "value": [
+              "[format('{0}.search.windows.net', variables('searchServiceName'))]"
+            ]
+          },
           "privateEndpoints": {
             "value": []
           }
@@ -27296,9 +27314,9 @@
       },
       "dependsOn": [
         "aiFoundryAiServices",
+        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').cognitiveServices)]",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').aiServices)]",
-        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
         "virtualNetwork"
       ]
     },
@@ -27318,15 +27336,8 @@
           "location": {
             "value": "[parameters('location')]"
           },
-          "authOptions": {
-            "value": {
-              "aadOrApiKey": {
-                "aadAuthFailureMode": "http401WithBearerChallenge"
-              }
-            }
-          },
           "disableLocalAuth": {
-            "value": false
+            "value": true
           },
           "hostingMode": {
             "value": "Default"
@@ -29450,8 +29461,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "977847065221098560"
+              "version": "0.43.8.12551",
+              "templateHash": "1735625309877492934"
             }
           },
           "parameters": {
@@ -29550,8 +29561,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "5411608621965957651"
+              "version": "0.43.8.12551",
+              "templateHash": "1433080150197323850"
             }
           },
           "parameters": {
@@ -36435,6 +36446,9 @@
           },
           "virtualNetworkSubnetId": "[if(parameters('enablePrivateNetworking'), createObject('value', reference('virtualNetwork').outputs.webserverfarmSubnetResourceId.value), createObject('value', null()))]",
           "publicNetworkAccess": "[if(parameters('enablePrivateNetworking'), createObject('value', 'Disabled'), createObject('value', 'Enabled'))]",
+          "e2eEncryptionEnabled": {
+            "value": true
+          },
           "privateEndpoints": "[if(parameters('enablePrivateNetworking'), createObject('value', createArray(createObject('name', format('pep-{0}', variables('backendWebSiteResourceName')), 'customNetworkInterfaceName', format('nic-{0}', variables('backendWebSiteResourceName')), 'privateDnsZoneGroup', createObject('privateDnsZoneGroupConfigs', createArray(createObject('privateDnsZoneResourceId', reference(format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').webApp)).outputs.resourceId.value))), 'service', 'sites', 'subnetResourceId', reference('virtualNetwork').outputs.backendSubnetResourceId.value))), createObject('value', createArray()))]"
         },
         "template": {
@@ -36444,8 +36458,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "13609531051773905187"
+              "version": "0.43.8.12551",
+              "templateHash": "15490584693408563123"
             }
           },
           "definitions": {
@@ -37451,8 +37465,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.42.1.51946",
-                      "templateHash": "11459765709838723797"
+                      "version": "0.43.8.12551",
+                      "templateHash": "16163995530530399452"
                     },
                     "name": "Site App Settings",
                     "description": "This module deploys a Site App Setting."
@@ -38374,8 +38388,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38494,8 +38508,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38608,8 +38622,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38725,8 +38739,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38843,8 +38857,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38998,8 +39012,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "13609531051773905187"
+              "version": "0.43.8.12551",
+              "templateHash": "15490584693408563123"
             }
           },
           "definitions": {
@@ -40005,8 +40019,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.42.1.51946",
-                      "templateHash": "11459765709838723797"
+                      "version": "0.43.8.12551",
+                      "templateHash": "16163995530530399452"
                     },
                     "name": "Site App Settings",
                     "description": "This module deploys a Site App Setting."
