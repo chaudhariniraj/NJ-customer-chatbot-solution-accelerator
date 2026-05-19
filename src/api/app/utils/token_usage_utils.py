@@ -94,70 +94,6 @@ def _read_usage_obj(usage_obj: Any) -> Optional[Tuple[int, int, int]]:
     return inp, out, tot
 
 
-def extract_per_agent_usage(result: Any) -> Dict[str, Tuple[int, int, int]]:
-    """Walk result.messages and group token usage by message author_name.
-
-    Returns a mapping {author_name: (input, output, total)}. Sub-agents invoked
-    as tools typically appear as messages with their own author_name and
-    usage_details on the content items. If no per-author breakdown can be
-    recovered, returns an empty dict (caller should fall back to totals).
-    """
-    breakdown: Dict[str, list] = {}
-    if result is None:
-        return {}
-    messages = getattr(result, "messages", None) or []
-    # Track the most recently seen explicit author so that intermediate
-    # messages produced inside a sub-agent's run (function_call / tool_result
-    # messages that often lack author_name) can be attributed back to the
-    # sub-agent that just spoke. Foundry per-run totals include those tokens;
-    # without this attribution we systematically undercount sub-agents.
-    last_author: Optional[str] = None
-    # Content type names that indicate an intermediate tool/function-call
-    # message rather than a normal assistant turn. These are the messages
-    # that commonly lack author_name but belong to the sub-agent run that
-    # just produced output.
-    _INTERMEDIATE_TYPES = {"function_call", "function_result", "tool_call", "tool_result"}
-    for msg in messages:
-        author = (
-            getattr(msg, "author_name", None)
-            or getattr(msg, "name", None)
-            or getattr(msg, "agent_name", None)
-        )
-        contents = getattr(msg, "contents", None) or []
-        is_intermediate = any(
-            getattr(c, "type", None) in _INTERMEDIATE_TYPES for c in contents
-        )
-        if author:
-            effective_author = author
-            last_author = author
-        elif is_intermediate and last_author:
-            effective_author = last_author
-        else:
-            continue
-
-        # 1) Message-level usage (some SDK paths attach usage to the message
-        #    itself rather than to a content item).
-        msg_usage = getattr(msg, "usage_details", None) or getattr(msg, "usage", None)
-        found = _read_usage_obj(msg_usage)
-        if found:
-            slot = breakdown.setdefault(effective_author, [0, 0, 0])
-            slot[0] += found[0]
-            slot[1] += found[1]
-            slot[2] += found[2]
-
-        # 2) Content-level usage (typical path for assistant messages).
-        for content in contents:
-            usage = getattr(content, "usage_details", None) or getattr(content, "usage", None)
-            found = _read_usage_obj(usage)
-            if not found:
-                continue
-            slot = breakdown.setdefault(effective_author, [0, 0, 0])
-            slot[0] += found[0]
-            slot[1] += found[1]
-            slot[2] += found[2]
-    return {a: (v[0], v[1], v[2]) for a, v in breakdown.items()}
-
-
 def extract_usage_from_agent_result(result: Any) -> Optional[Tuple[int, int, int]]:
     """Extract (input_tokens, output_tokens, total_tokens) from an
     agent_framework AgentRunResponse (or similar).
@@ -218,7 +154,6 @@ def track_token_usage(
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
     additional_agents: Optional[Dict[str, str]] = None,
-    agent_token_breakdown: Optional[Dict[str, Tuple[int, int, int]]] = None,
 ) -> None:
     """Emit summary, per-agent and per-model token usage events.
 
@@ -228,12 +163,8 @@ def track_token_usage(
         input_tokens / output_tokens / total_tokens: Request-level totals.
         user_id / session_id: Optional context, included on every event.
         additional_agents: Optional mapping {agent_name -> model_deployment_name}
-            for sub-agents/tools that participated in the request.
-        agent_token_breakdown: Optional mapping {agent_name -> (input, output, total)}
-            giving real per-agent token consumption. When supplied, per-agent
-            events use these numbers instead of duplicating the request totals.
-            Agents missing from the breakdown fall back to 0 tokens (i.e. the
-            event is still emitted for invocation counts but tokens are 0).
+            for sub-agents/tools that participated in the request. Used for
+            agent_count/model_count in the summary event and for per-model events.
     """
     if total_tokens <= 0 and input_tokens <= 0 and output_tokens <= 0:
         return
@@ -261,36 +192,21 @@ def track_token_usage(
             },
         )
 
-        # Per-agent (primary first, then additional).
-        # role/is_primary lets KQL filter:
-        #   - role == "orchestrator" → use for true totals (avoids double-count)
-        #   - role == "tool"         → use for invocation counts / which sub-agents ran
-        for ag_name, ag_model in agents.items():
-            is_primary = ag_name == agent_name
-            role = "orchestrator" if is_primary else "tool"
-            # Per-agent tokens: prefer breakdown, else duplicate totals for the
-            # primary agent only; sub-agents without breakdown get 0 so we
-            # don't double-count when summing tokens by agent_name.
-            if agent_token_breakdown and ag_name in agent_token_breakdown:
-                ag_inp, ag_out, ag_tot = agent_token_breakdown[ag_name]
-            elif is_primary and not agent_token_breakdown:
-                ag_inp, ag_out, ag_tot = input_tokens, output_tokens, total_tokens
-            else:
-                ag_inp = ag_out = ag_tot = 0
-            track_event_if_configured(
-                "LLM_Agent_Token_Usage",
-                {
-                    **props_common,
-                    "agent_name": ag_name,
-                    "model_deployment_name": ag_model or "",
-                    "input_tokens": str(ag_inp),
-                    "output_tokens": str(ag_out),
-                    "total_tokens": str(ag_tot),
-                    "is_primary": "true" if is_primary else "false",
-                    "role": role,
-                    "primary_agent_name": agent_name,
-                },
-            )
+        # Per-agent event for the primary (orchestrator) agent only.
+        # NOTE: Sub-agent (tool) token breakdown is not available — the Azure
+        # AI SDK aggregates all tokens at the orchestrator level when using
+        # .as_tool(), so we only emit one event with the full token counts.
+        track_event_if_configured(
+            "LLM_Agent_Token_Usage",
+            {
+                **props_common,
+                "agent_name": agent_name,
+                "model_deployment_name": model_deployment_name or "",
+                "input_tokens": str(input_tokens),
+                "output_tokens": str(output_tokens),
+                "total_tokens": str(total_tokens),
+            },
+        )
 
         # Per-model (one event per distinct model)
         for model in models:
@@ -338,28 +254,6 @@ def extract_and_track_usage(
         return None
     inp, out, tot = usage
 
-    # Build a real per-agent breakdown from message authors. The primary
-    # (chat) agent's tokens are derived as: total − sum(sub-agent tokens),
-    # so the per-agent rows sum exactly to the request total.
-    per_author = extract_per_agent_usage(result)
-    breakdown: Dict[str, Tuple[int, int, int]] = {}
-    sub_inp = sub_out = sub_tot = 0
-    known_agents = {agent_name}
-    if additional_agents:
-        known_agents.update(additional_agents.keys())
-    for author, (a_inp, a_out, a_tot) in per_author.items():
-        if author in known_agents and author != agent_name:
-            breakdown[author] = (a_inp, a_out, a_tot)
-            sub_inp += a_inp
-            sub_out += a_out
-            sub_tot += a_tot
-    if breakdown or per_author:
-        breakdown[agent_name] = (
-            max(inp - sub_inp, 0),
-            max(out - sub_out, 0),
-            max(tot - sub_tot, 0),
-        )
-
     track_token_usage(
         agent_name=agent_name,
         model_deployment_name=model_deployment_name,
@@ -369,7 +263,6 @@ def extract_and_track_usage(
         user_id=user_id,
         session_id=session_id,
         additional_agents=additional_agents,
-        agent_token_breakdown=breakdown or None,
     )
     return usage
 

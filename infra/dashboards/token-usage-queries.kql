@@ -30,45 +30,29 @@ customEvents
 
 
 // -----------------------------------------------------------------------------
-// 2. Token usage per agent (last 7 days)
+// 2. Token usage per agent (chat + speech, last 7 days)
 //
-// `LLM_Agent_Token_Usage` is emitted once per agent that participated in a
-// request. Token counts are PER-AGENT (chat agent = total − sum(sub-agents)),
-// so per-agent rows sum exactly to the request total — safe to sum across all
-// roles without double-counting.
-//   * role == "orchestrator" → primary (chat) agent's own tokens
-//   * role == "tool"         → each sub-agent's own tokens + invocation count
+// Unions LLM chat agent usage (LLM_Agent_Token_Usage) and Voice Live realtime
+// speech usage (Speech_Usage) so all agent-level token consumption is visible.
+// NOTE: Sub-agent (tool) token breakdown is not available — the Azure AI SDK
+// aggregates all tokens at the orchestrator level when using .as_tool().
 // -----------------------------------------------------------------------------
-
-// 2a. Per-agent token consumption (all roles — no double counting)
 customEvents
 | where timestamp > ago(7d)
-| where name == "LLM_Agent_Token_Usage"
+| where name in ("LLM_Agent_Token_Usage", "Speech_Usage")
 | extend
     agent_name    = tostring(customDimensions.agent_name),
-    role          = tostring(customDimensions.role),
     input_tokens  = toint(customDimensions.input_tokens),
     output_tokens = toint(customDimensions.output_tokens),
-    total_tokens  = toint(customDimensions.total_tokens)
+    total_tokens  = toint(customDimensions.total_tokens),
+    agent_kind    = iff(name == "Speech_Usage", "speech", "chat")
 | summarize
-    Invocations  = count(),
+    Requests     = count(),
     InputTokens  = sum(input_tokens),
     OutputTokens = sum(output_tokens),
     TotalTokens  = sum(total_tokens)
-    by agent_name, role
+    by agent_name, agent_kind
 | order by TotalTokens desc
-
-
-// 2b. Sub-agent (tool) invocations — how often each tool agent was called
-customEvents
-| where timestamp > ago(7d)
-| where name == "LLM_Agent_Token_Usage"
-| where tostring(customDimensions.role) == "tool"
-| extend
-    agent_name         = tostring(customDimensions.agent_name),
-    primary_agent_name = tostring(customDimensions.primary_agent_name)
-| summarize Invocations = count() by agent_name, primary_agent_name
-| order by Invocations desc
 
 
 // -----------------------------------------------------------------------------
