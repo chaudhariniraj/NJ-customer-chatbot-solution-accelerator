@@ -3,6 +3,29 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
+BACKEND_PID=""
+FRONTEND_PID=""
+
+# Cleanup can run before both services are started, so guard PID usage.
+cleanup() {
+  echo ""
+  echo "Stopping services..."
+
+  if [[ -n "${BACKEND_PID}" ]] && kill -0 "$BACKEND_PID" 2>/dev/null; then
+    kill "$BACKEND_PID" 2>/dev/null
+    wait "$BACKEND_PID" 2>/dev/null
+  fi
+
+  if [[ -n "${FRONTEND_PID}" ]] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
+    kill "$FRONTEND_PID" 2>/dev/null
+    wait "$FRONTEND_PID" 2>/dev/null
+  fi
+}
+
+# Install traps early so Ctrl+C during startup does not orphan processes.
+trap 'cleanup; exit 0' INT TERM
+trap cleanup EXIT
+
 echo "Starting E-commerce Chat Application..."
 
 echo ""
@@ -31,16 +54,6 @@ echo "Backend: http://localhost:8000"
 echo "Frontend: http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop both services"
-
-# Trap SIGINT/SIGTERM to kill both background processes on exit
-cleanup() {
-  echo ""
-  echo "Stopping services..."
-  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null
-  wait "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null
-  exit 0
-}
-trap cleanup INT TERM
 
 # Wait for user to stop
 wait "$BACKEND_PID" "$FRONTEND_PID"
