@@ -275,7 +275,7 @@ module assignFoundryRoleToMIExisting 'deploy_foundry_role_assignment.bicep' = if
   }
 }
 
-// assign azure ai user role to deployer
+// assign Foundry User role to deployer
 resource assignFoundryRoleToDeployer 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (empty(azureExistingAIProjectResourceId))  {
   name: guid(resourceGroup().id, aiServices.id, aiUser.id, 'deployer')
   scope: aiServices
