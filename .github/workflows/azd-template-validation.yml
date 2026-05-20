@@ -18,14 +18,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set timestamp
         shell: bash
         run: echo "HHMM=$(date -u +'%H%M')" >> "$GITHUB_ENV"
 
       - name: Validate Azure Template
-        uses: microsoft/template-validation-action@v0.4.3
+        uses: microsoft/template-validation-action@v0.4.4
         with:
           validateAzd: ${{ vars.TEMPLATE_VALIDATE_AZD }}
           validateTests: ${{ vars.TEMPLATE_VALIDATE_TESTS }}
@@ -37,7 +37,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}-${{ env.HHMM }}
           AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-          AZURE_ENV_OPENAI_LOCATION: ${{ vars.AZURE_LOCATION }}
+          AZURE_ENV_AI_SERVICE_LOCATION: ${{ vars.AZURE_LOCATION }}
           AZURE_AI_MODEL_CAPACITY: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AZURE_DEV_COLLECT_TELEMETRY: ${{ vars.AZURE_DEV_COLLECT_TELEMETRY }}

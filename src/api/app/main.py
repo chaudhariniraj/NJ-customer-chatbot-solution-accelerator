@@ -142,8 +142,10 @@ async def attach_trace_attributes(request: Request, call_next):
                         sid = data.get("session_id")
                         if sid:
                             span.set_attribute("session_id", sid)
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    pass
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    # Best-effort session_id extraction; malformed bodies should
+                    # not break request processing. Logged for diagnostics only.
+                    logger.debug("Failed to parse request body for session_id: %s", exc)
 
     return await call_next(request)
 

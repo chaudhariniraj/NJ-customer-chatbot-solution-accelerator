@@ -1,14 +1,14 @@
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/primitives/button';
+import { Input } from '@/components/primitives/input';
+import { ScrollArea } from '@/components/primitives/scroll-area';
+import { Skeleton } from '@/components/primitives/skeleton';
+import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { getApiBaseUrl, getVoiceLiveConfig } from '@/lib/api';
 import { floatTo16BitPCM, pcm16ToBase64, playPCM16Chunk, resampleTo24k } from '@/lib/audioUtils';
-import { cleanTextForSpeech } from '@/lib/textCleaners';
 import { ChatMessage, Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Send20Regular, Stop20Filled } from '@fluentui/react-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EnhancedChatMessageBubble } from './EnhancedChatMessageBubble';
 
 interface EnhancedChatPanelProps {
@@ -16,11 +16,10 @@ interface EnhancedChatPanelProps {
   onSendMessage: (content: string) => void;
   onVoiceMessage?: (text: string, role: 'user' | 'assistant') => void;
   isTyping: boolean;
-  isOpen: boolean;
-  onClose: () => void;
   onAddToCart?: (product: Product) => void;
   className?: string;
   isLoading?: boolean;
+  onVoiceProcessingChange?: (isProcessing: boolean) => void;
 }
 
 export const EnhancedChatPanel = ({
@@ -28,22 +27,22 @@ export const EnhancedChatPanel = ({
   onSendMessage,
   onVoiceMessage,
   isTyping,
-  isOpen,
-  onClose,
   onAddToCart,
   className,
   isLoading = false,
+  onVoiceProcessingChange,
 }: EnhancedChatPanelProps) => {
   const [inputValue, setInputValue] = useState('');
   const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [isAgentVoiceEnabled, setIsAgentVoiceEnabled] = useState(false);
+  const [isAgentVoiceEnabled] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
-  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [, setSpeakingMessageId] = useState<string | null>(null);
   const [spokenAssistantIds, setSpokenAssistantIds] = useState<string[]>([]);
   const [voiceSessionState, setVoiceSessionState] = useState<'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [isVoiceTransitioning, setIsVoiceTransitioning] = useState(false);
   const [streamingVoiceText, setStreamingVoiceText] = useState('');
+  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +52,7 @@ export const EnhancedChatPanel = ({
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorNodeRef = useRef<AudioWorkletNode | null>(null);
   const playbackContextRef = useRef<AudioContext | null>(null);
+  const ttsAbortControllerRef = useRef<AbortController | null>(null);
   const playbackTimeRef = useRef<number>(0);
   const clientIdRef = useRef<string>(crypto.randomUUID());
   const lastSentTranscriptRef = useRef<string>('');
@@ -60,19 +60,32 @@ export const EnhancedChatPanel = ({
   const isLoadingRef = useRef(isLoading);
   const onSendMessageRef = useRef(onSendMessage);
   const onVoiceMessageRef = useRef(onVoiceMessage);
+  const onVoiceProcessingChangeRef = useRef(onVoiceProcessingChange);
   const voiceConfigCacheRef = useRef<any>(null);
   const audioBufferQueueRef = useRef<string[]>([]);
   const sessionReadyRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  const awaitingResponseRef = useRef(false);
+  const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the current voice turn has already posted the structured tool
+  // result to chat history (via the early `tool_result` event). When true, the
+  // final RESPONSE_DONE transcript skips re-posting to avoid duplicates.
+  const voiceStructuredPostedRef = useRef(false);
+  // Buffer for tool_result text that arrives before the user transcript (transcription
+  // is async in Azure Voice Live and can lag behind the function-call response).
+  const pendingToolResultRef = useRef<string | null>(null);
+  // Whether the user transcript for the current turn has been posted to chat history.
+  const userTranscriptPostedRef = useRef(false);
 
   isTypingRef.current = isTyping;
   isLoadingRef.current = isLoading;
   onSendMessageRef.current = onSendMessage;
   onVoiceMessageRef.current = onVoiceMessage;
+  onVoiceProcessingChangeRef.current = onVoiceProcessingChange;
   const speakingMessageIdRef = useRef<string | null>(null);
 
   const getVoiceMessageKey = (message: ChatMessage, index: number): string => {
-    const rawTimestamp = message.timestamp instanceof Date ? message.timestamp.getTime() : new Date(message.timestamp).getTime();
+    const rawTimestamp = new Date(message.timestamp).getTime();
     const safeTimestamp = Number.isNaN(rawTimestamp) ? 0 : rawTimestamp;
     return `${message.id || 'no-id'}-${message.sender}-${safeTimestamp}-${index}`;
   };
@@ -85,27 +98,38 @@ export const EnhancedChatPanel = ({
 
     // If currently playing this message, stop it
     if (speakingMessageIdRef.current === voiceMessageKey) {
+      // Abort any in-flight TTS fetch
+      if (ttsAbortControllerRef.current) {
+        ttsAbortControllerRef.current.abort();
+        ttsAbortControllerRef.current = null;
+      }
       // Stop any playing audio
       if (playbackContextRef.current) {
         await playbackContextRef.current.close();
         playbackContextRef.current = null;
         playbackTimeRef.current = 0;
       }
-      window.speechSynthesis.cancel();
       speakingMessageIdRef.current = null;
       setSpeakingMessageId(null);
       return;
     }
 
+    // Abort any in-flight TTS fetch for a different message
+    if (ttsAbortControllerRef.current) {
+      ttsAbortControllerRef.current.abort();
+      ttsAbortControllerRef.current = null;
+    }
     // Stop any other playing message
     if (playbackContextRef.current) {
       await playbackContextRef.current.close();
       playbackContextRef.current = null;
       playbackTimeRef.current = 0;
     }
-    window.speechSynthesis.cancel();
     speakingMessageIdRef.current = voiceMessageKey;
     setSpeakingMessageId(voiceMessageKey);
+
+    const abortController = new AbortController();
+    ttsAbortControllerRef.current = abortController;
 
     setSpokenAssistantIds((current) => (
       current.includes(voiceMessageKey) ? current : [...current, voiceMessageKey]
@@ -118,6 +142,7 @@ export const EnhancedChatPanel = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: rawText }),
+        signal: abortController.signal,
       });
 
       if (!resp.ok) {
@@ -125,6 +150,12 @@ export const EnhancedChatPanel = ({
       }
 
       const pcmData = await resp.arrayBuffer();
+
+      // Bail out if the user stopped/switched while the response was being read
+      if (abortController.signal.aborted || speakingMessageIdRef.current !== voiceMessageKey) {
+        return;
+      }
+
       const sampleRate = parseInt(resp.headers.get('X-Sample-Rate') || '24000', 10);
 
       // Play PCM16 audio
@@ -152,54 +183,52 @@ export const EnhancedChatPanel = ({
       };
       source.start();
     } catch (err) {
-      console.error('TTS error, falling back to browser speech:', err);
-      // Fallback to browser speechSynthesis
-      speakingMessageIdRef.current = null;
-      setSpeakingMessageId(null);
-
-      const cleanText = cleanTextForSpeech(rawText);
-
-      if (cleanText) {
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 1.05;
-        utterance.onstart = () => {
-          speakingMessageIdRef.current = voiceMessageKey;
-          setSpeakingMessageId(voiceMessageKey);
-        };
-        utterance.onend = () => {
-          speakingMessageIdRef.current = null;
-          setSpeakingMessageId(null);
-        };
-        utterance.onerror = () => {
-          speakingMessageIdRef.current = null;
-          setSpeakingMessageId(null);
-        };
-        setTimeout(() => window.speechSynthesis.speak(utterance), 50);
+      // Ignore aborts — the user stopped/switched intentionally
+      if ((err as Error)?.name === 'AbortError') {
+        return;
+      }
+      console.error('TTS error:', err);
+      if (speakingMessageIdRef.current === voiceMessageKey) {
+        speakingMessageIdRef.current = null;
+        setSpeakingMessageId(null);
+      }
+    } finally {
+      if (ttsAbortControllerRef.current === abortController) {
+        ttsAbortControllerRef.current = null;
       }
     }
   };
 
-  const handleSend = () => {
+  const isInputDisabled = useMemo(
+    () => isTyping || isLoading || isVoiceProcessing,
+    [isTyping, isLoading, isVoiceProcessing],
+  );
+
+  const handleSend = useCallback(() => {
     if (inputValue.trim()) {
       onSendMessage(inputValue.trim());
       setInputValue('');
-      // Focus the input after sending
       setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
     }
-  };
+  }, [inputValue, onSendMessage]);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [handleSend]);
 
+  useAutoScroll(messagesEndRef, [messages, isTyping]);
+
+  // Derive voice processing state from voiceSessionState
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+    const processing = voiceSessionState === 'thinking' || voiceSessionState === 'speaking';
+    setIsVoiceProcessing(processing);
+    onVoiceProcessingChangeRef.current?.(processing);
+  }, [voiceSessionState]);
 
   useEffect(() => {
     let isMounted = true;
@@ -222,7 +251,6 @@ export const EnhancedChatPanel = ({
     };
   }, []);
 
-  // Maintain focus on input when not typing
   useEffect(() => {
     if (!isTyping && !isLoading && inputRef.current) {
       inputRef.current.focus();
@@ -242,20 +270,6 @@ export const EnhancedChatPanel = ({
       <rect x="10" y="4" width="2" height="12" rx="1" fill="currentColor" />
       <rect x="14" y="6" width="2" height="8" rx="1" fill="currentColor" />
       <rect x="18" y="8" width="2" height="4" rx="1" fill="currentColor" />
-    </svg>
-  );
-
-  const SpeakerIcon = () => (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="M3 8H6L10 5V15L6 12H3V8Z" fill="currentColor" />
-      <path d="M13 8.2C13.6 8.7 14 9.5 14 10.4C14 11.3 13.6 12.1 13 12.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M14.8 6.7C15.8 7.6 16.4 8.9 16.4 10.4C16.4 11.9 15.8 13.2 14.8 14.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 
@@ -300,7 +314,15 @@ export const EnhancedChatPanel = ({
   const stopVoiceSession = async () => {
     setIsVoiceTransitioning(true);
     sessionReadyRef.current = false;
+    awaitingResponseRef.current = false;
+    voiceStructuredPostedRef.current = false;
+    pendingToolResultRef.current = null;
+    userTranscriptPostedRef.current = false;
     audioBufferQueueRef.current = [];
+    if (responseTimeoutRef.current) {
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
+    }
 
     const ws = wsRef.current;
     wsRef.current = null;
@@ -323,14 +345,6 @@ export const EnhancedChatPanel = ({
     isSpeakingRef.current = false;
     setIsVoiceTransitioning(false);
     setStreamingVoiceText('');
-  };
-
-  /** Stop listening only — mic stops but let the agent finish responding */
-  const stopListeningOnly = async () => {
-    await stopMicrophoneCapture();
-    setIsVoiceActive(false);
-    setVoiceSessionState('idle');
-    // Keep WebSocket open so agent response can still come through
   };
 
   const startMicrophoneCapture = async () => {
@@ -418,7 +432,9 @@ export const EnhancedChatPanel = ({
     try {
       await startMicrophoneCapture();
       setIsVoiceActive(true);
-      setVoiceSessionState('listening');
+      // Stay in 'connecting' — the 'listening' state is set when the
+      // WebSocket session_started event arrives, which means the backend
+      // is actually ready to accept audio input.
     } catch (micError) {
       console.error('Unable to start microphone capture', micError);
       setVoiceError('Microphone access failed. Check browser permissions and try again.');
@@ -481,30 +497,118 @@ export const EnhancedChatPanel = ({
           setVoiceSessionState('thinking');
           setInputValue('');
           lastSentTranscriptRef.current = transcript;
+          awaitingResponseRef.current = true;
 
           // Display user transcript in chat
           onVoiceMessageRef.current?.(transcript, 'user');
+          userTranscriptPostedRef.current = true;
+
+          // If the tool_result arrived before the transcription completed
+          // (Azure Voice Live transcription is async), flush the buffered
+          // assistant message now so it appears AFTER the user message.
+          if (pendingToolResultRef.current) {
+            onVoiceMessageRef.current?.(pendingToolResultRef.current, 'assistant');
+            pendingToolResultRef.current = null;
+          }
+
+          // Timeout: if no assistant response within 30s, show error
+          if (responseTimeoutRef.current) clearTimeout(responseTimeoutRef.current);
+          responseTimeoutRef.current = setTimeout(() => {
+            if (awaitingResponseRef.current) {
+              awaitingResponseRef.current = false;
+              voiceStructuredPostedRef.current = false;
+              setVoiceError('No response received. Please try again.');
+              setStreamingVoiceText('');
+              setVoiceSessionState('idle');
+              const ws = wsRef.current;
+              wsRef.current = null;
+              if (ws) {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'stop_session' }));
+                }
+                if (ws.readyState !== WebSocket.CLOSED) {
+                  ws.close();
+                }
+              }
+            }
+          }, 30_000);
 
           // Auto-stop mic after question captured — prevents feedback
           stopMicrophoneCapture().then(() => setIsVoiceActive(false));
         }
 
         if (message.type === 'audio_data' && message.data) {
+          // Assistant is responding — clear the no-response timeout
+          awaitingResponseRef.current = false;
+          if (responseTimeoutRef.current) {
+            clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+          }
           setVoiceSessionState('speaking');
           isSpeakingRef.current = true;
           playAssistantAudioChunk(message.data, message.sampleRate || 24000);
         }
 
+        // Tool result from the Foundry agent. If the user transcript has already
+        // been posted we can render the assistant message immediately; otherwise
+        // buffer it so that the user message always appears first in chat.
+        if (message.type === 'tool_result' && typeof message.structuredText === 'string' && message.structuredText.trim()) {
+          // Assistant is responding — clear the no-response timeout
+          awaitingResponseRef.current = false;
+          if (responseTimeoutRef.current) {
+            clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+          }
+          setStreamingVoiceText('');
+          if (userTranscriptPostedRef.current) {
+            // User message already in chat — safe to post assistant immediately
+            onVoiceMessageRef.current?.(message.structuredText, 'assistant');
+          } else {
+            // Transcription still pending — buffer until user message is posted
+            pendingToolResultRef.current = message.structuredText;
+          }
+          voiceStructuredPostedRef.current = true;
+        }
+
         // Show intermediate transcript text as it streams in (alongside audio)
         if (message.type === 'transcript' && message.role === 'assistant' && !message.isFinal && message.text) {
-          setStreamingVoiceText(message.text);
+          // Assistant is responding — clear the no-response timeout
+          if (awaitingResponseRef.current) {
+            awaitingResponseRef.current = false;
+            if (responseTimeoutRef.current) {
+              clearTimeout(responseTimeoutRef.current);
+              responseTimeoutRef.current = null;
+            }
+          }
+          if (!voiceStructuredPostedRef.current) {
+            setStreamingVoiceText(message.text);
+          }
         }
 
         if (message.type === 'transcript' && message.role === 'assistant' && message.isFinal && message.text) {
+          // Response received — clear timeout and flag
+          awaitingResponseRef.current = false;
+          if (responseTimeoutRef.current) {
+            clearTimeout(responseTimeoutRef.current);
+            responseTimeoutRef.current = null;
+          }
+
           // Clear streaming text and add the final message to chat history
           setStreamingVoiceText('');
-          const displayText = message.text;
-          onVoiceMessageRef.current?.(displayText, 'assistant');
+          // If the structured tool result was already posted via the earlier
+          // `tool_result` event, skip re-posting on RESPONSE_DONE. Otherwise prefer
+          // structuredText (Foundry markdown for product cards) over the spoken
+          // paraphrase so cards render the same way as the text-chat path.
+          if (!voiceStructuredPostedRef.current) {
+            const displayText =
+              (typeof message.structuredText === 'string' && message.structuredText.trim())
+                ? message.structuredText
+                : message.text;
+            onVoiceMessageRef.current?.(displayText, 'assistant');
+          }
+          voiceStructuredPostedRef.current = false;
+          pendingToolResultRef.current = null;
+          userTranscriptPostedRef.current = false;
           setVoiceSessionState('idle');
           isSpeakingRef.current = false;
 
@@ -563,6 +667,20 @@ export const EnhancedChatPanel = ({
     };
 
     ws.onclose = async () => {
+      // If we were still waiting for an assistant response, the connection
+      // dropped before the answer arrived — notify the user.
+      if (awaitingResponseRef.current) {
+        awaitingResponseRef.current = false;
+        if (responseTimeoutRef.current) {
+          clearTimeout(responseTimeoutRef.current);
+          responseTimeoutRef.current = null;
+        }
+        setVoiceError('Voice connection closed before a response was received. Please try again.');
+      }
+      voiceStructuredPostedRef.current = false;
+      pendingToolResultRef.current = null;
+      userTranscriptPostedRef.current = false;
+      setStreamingVoiceText('');
       await stopMicrophoneCapture();
       setIsVoiceActive(false);
       setVoiceSessionState('idle');
@@ -615,7 +733,6 @@ export const EnhancedChatPanel = ({
   useEffect(() => {
     return () => {
       stopVoiceSession();
-      window.speechSynthesis.cancel();
       speakingMessageIdRef.current = null;
       setSpeakingMessageId(null);
       if (playbackContextRef.current) {
@@ -627,14 +744,12 @@ export const EnhancedChatPanel = ({
 
   useEffect(() => {
     if (!isAgentVoiceEnabled) {
-      window.speechSynthesis.cancel();
       speakingMessageIdRef.current = null;
       setSpeakingMessageId(null);
       return;
     }
 
     if (isVoiceActive) {
-      window.speechSynthesis.cancel();
       speakingMessageIdRef.current = null;
       setSpeakingMessageId(null);
       return;
@@ -642,6 +757,13 @@ export const EnhancedChatPanel = ({
 
     const latestAssistantMessage = [...messages].reverse().find((message) => message.sender === 'assistant');
     if (!latestAssistantMessage) {
+      return;
+    }
+
+    // Skip messages that originated from a voice session — they were already
+    // played back as streamed audio, so auto-speaking them would produce a
+    // duplicate "second voice".
+    if (latestAssistantMessage.id?.startsWith('voice-assistant-')) {
       return;
     }
 
@@ -658,14 +780,11 @@ export const EnhancedChatPanel = ({
 
   return (
     <div className={cn("flex flex-col h-full bg-background", className)}>
-      {/* Scrollable Chat Content Area - Takes remaining space */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1 h-full" ref={scrollAreaRef}>
           <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
-            {/* Loading State - Show skeleton when loading chat history */}
             {isLoading && messages.length === 0 ? (
               <div className="space-y-4">
-                {/* Loading skeleton for messages */}
                 <div className="flex gap-3 justify-start">
                   <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
                   <div className="space-y-2 flex-1 max-w-[80%]">
@@ -687,17 +806,15 @@ export const EnhancedChatPanel = ({
               </div>
             ) : (
               <>
-                {/* Welcome Message - Only show when no messages and not loading */}
-                {messages.length === 0 && !isTyping && !isLoading && (
+                {/* Welcome Message - Only show when no messages, not loading, and no active voice session */}
+                {messages.length === 0 && !isTyping && !isLoading && voiceSessionState === 'idle' && !streamingVoiceText && (
               <div className="flex flex-col items-center justify-center text-center space-y-6 h-full min-h-[400px]">
-                {/* AI Assistant Icon */}
                 <img 
                   src="/contoso-ai-icon.png" 
                   alt="AI Assistant" 
                   className="w-16 h-16"
                 />
                 
-                {/* Welcome Text */}
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold text-foreground">
                     Hey! I'm here to help.
@@ -707,14 +824,12 @@ export const EnhancedChatPanel = ({
                   </p>
                 </div>
                 
-                {/* Quick Start Hint */}
                 <div className="text-xs text-muted-foreground">
                   Click the new chat button above to start a new chat anytime
                 </div>
               </div>
             )}
 
-            {/* Chat Messages */}
             {messages.map((message, index) => {
               const voiceMessageKey = getVoiceMessageKey(message, index);
               return (
@@ -726,26 +841,29 @@ export const EnhancedChatPanel = ({
             );
             })}
             
-            {/* Streaming voice assistant transcript — shown while audio plays */}
+            {/* Streaming voice assistant — show typing indicator instead of paraphrased
+                plain text. The final message arrives with structuredText (markdown) and
+                renders as product cards, so showing the partial text here causes a visible
+                flicker (plain text → cards). The TTS audio provides the spoken feedback. */}
             {streamingVoiceText && (
               <EnhancedChatMessageBubble
                 message={{
                   id: 'voice-streaming',
-                  content: streamingVoiceText,
+                  content: '',
                   sender: 'assistant',
-                  timestamp: new Date()
+                  timestamp: new Date().toISOString()
                 }}
+                isTyping={true}
               />
             )}
 
-            {/* Typing Indicator - Only show when AI is actively responding */}
             {isTyping && !isLoading && (
               <EnhancedChatMessageBubble
                 message={{
                   id: 'typing',
                   content: '',
                   sender: 'assistant',
-                  timestamp: new Date()
+                  timestamp: new Date().toISOString()
                 }}
                 isTyping={true}
               />
@@ -757,9 +875,7 @@ export const EnhancedChatPanel = ({
         </ScrollArea>
       </div>
 
-      {/* Fixed Input Footer */}
       <div className="flex-shrink-0 border-t bg-background p-2 sm:p-4 space-y-2 sm:space-y-3">
-        {/* Input Field */}
         <div className="flex-1 relative">
           <Input
             ref={inputRef}
@@ -767,8 +883,8 @@ export const EnhancedChatPanel = ({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            className="pr-16 resize-none min-h-[40px]"
-            disabled={isTyping || isLoading}
+            className="pr-21 resize-none min-h-[40px]"
+            disabled={isInputDisabled}
           />
           <div className="absolute right-1 top-1/2 transform -translate-y-1/2 flex gap-1">
             <Button
@@ -797,6 +913,9 @@ export const EnhancedChatPanel = ({
                 !isVoiceEnabled
                 || isVoiceTransitioning
                 || voiceSessionState === 'thinking'
+                || isVoiceProcessing
+                || isTyping 
+                || isLoading
               }
             >
               {isVoiceActive && voiceSessionState === 'listening' && (
@@ -816,14 +935,13 @@ export const EnhancedChatPanel = ({
               className="h-8 w-8 p-0"
               title="Send message"
               onClick={handleSend}
-              disabled={!inputValue.trim() || isTyping || isLoading}
+              disabled={!inputValue.trim() || isInputDisabled}
             >
               <Send20Regular className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Disclaimer */}
         <p className="text-xs text-muted-foreground text-center">
           AI-generated content may be incorrect
         </p>

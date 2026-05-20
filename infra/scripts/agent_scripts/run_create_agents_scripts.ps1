@@ -246,7 +246,7 @@ Write-Host ""
 Write-Host "Getting signed in user id"
 $signed_user_id = az ad signed-in-user show --query id -o tsv
 
-Write-Host "Checking if the user has Azure AI User role on the AI Foundry"
+Write-Host "Checking if the user has Foundry User role on the AI Foundry"
 $role_assignment = az role assignment list `
   --role "53ca6127-db72-4b80-b1b0-d745d6d5456d" `
   --scope "$aiFoundryResourceId" `
@@ -254,7 +254,7 @@ $role_assignment = az role assignment list `
   --query "[].roleDefinitionId" -o tsv
 
 if ([string]::IsNullOrEmpty($role_assignment)) {
-    Write-Host "User does not have the Azure AI User role. Assigning the role..."
+    Write-Host "User does not have the Foundry User role. Assigning the role..."
     az role assignment create `
       --assignee "$signed_user_id" `
       --role "53ca6127-db72-4b80-b1b0-d745d6d5456d" `
@@ -262,13 +262,13 @@ if ([string]::IsNullOrEmpty($role_assignment)) {
       --output none
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Azure AI User role assigned successfully."
+        Write-Host "Foundry User role assigned successfully."
     } else {
-        Write-Host "Failed to assign Azure AI User role."
+        Write-Host "Failed to assign Foundry User role."
         exit 1
     }
 } else {
-    Write-Host "User already has the Azure AI User role."
+    Write-Host "User already has the Foundry User role."
 }
 
 $requirementFile = "infra/scripts/agent_scripts/requirements.txt"

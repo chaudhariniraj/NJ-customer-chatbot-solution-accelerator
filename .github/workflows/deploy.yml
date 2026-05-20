@@ -35,7 +35,7 @@ jobs:
       API_URL: ${{ steps.get_output.outputs.API_URL }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Azure CLI
         run: |
@@ -43,7 +43,7 @@ jobs:
           az --version  # Verify installation
 
       - name: Login to Azure (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -89,7 +89,7 @@ jobs:
       - name: Set Deployment Region
         run: |
           echo "Selected Region: $VALID_REGION"
-          echo "AZURE_LOCATION=$VALID_REGION" >> $GITHUB_ENV
+          echo "AZURE_ENV_AI_SERVICE_LOCATION=$VALID_REGION" >> $GITHUB_ENV
 
       - name: Install Bicep CLI
         run: az bicep install
@@ -112,7 +112,7 @@ jobs:
           rg_exists=$(az group exists --name ${{ env.RESOURCE_GROUP_NAME }})
           if [ "$rg_exists" = "false" ]; then
             echo "Resource group does not exist. Creating..."
-            az group create --name ${{ env.RESOURCE_GROUP_NAME }} --location ${{ env.AZURE_LOCATION }} || { echo "Error creating resource group"; exit 1; }
+            az group create --name ${{ env.RESOURCE_GROUP_NAME }} --location ${{ vars.AZURE_LOCATION }} || { echo "Error creating resource group"; exit 1; }
           else
             echo "Resource group already exists."
           fi
@@ -153,8 +153,8 @@ jobs:
             --template-file infra/main.bicep \
             --parameters \
                 solutionName="${{ env.SOLUTION_PREFIX }}" \
-                location='${{ env.AZURE_LOCATION }}' \
-                azureAiServiceLocation='${{ env.AZURE_LOCATION }}' \
+                location='${{ vars.AZURE_LOCATION }}' \
+                azureAiServiceLocation='${{ env.AZURE_ENV_AI_SERVICE_LOCATION }}' \
                 imageTag="${IMAGE_TAG}" \
                 createdBy="Pipeline" \
                 tags="{'SecurityControl':'Ignore','Purpose':'Pipeline','CreatedDate':'$current_date','Solution':'Customer-Chatbot'}"
@@ -192,7 +192,7 @@ jobs:
           az --version  # Verify installation
 
       - name: Login to Azure (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -384,7 +384,7 @@ jobs:
           if [ ! -z "${{ env.AI_SERVICES_NAME }}" ]; then
             echo "AI Services: ${{ env.AI_SERVICES_NAME }}"
             echo "Purging the AI Services Resource..."
-            if ! az resource delete --ids /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/providers/Microsoft.CognitiveServices/locations/${{ env.AZURE_LOCATION }}/resourceGroups/${{ env.RESOURCE_GROUP_NAME }}/deletedAccounts/${{ env.AI_SERVICES_NAME }} --verbose; then
+            if ! az resource delete --ids /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/providers/Microsoft.CognitiveServices/locations/${{ vars.AZURE_LOCATION }}/resourceGroups/${{ env.RESOURCE_GROUP_NAME }}/deletedAccounts/${{ env.AI_SERVICES_NAME }} --verbose; then
               echo "Failed to purge AI Services resource: ${{ env.AI_SERVICES_NAME }}"
             else
               echo "Purged the AI Services resource: ${{ env.AI_SERVICES_NAME }}"
