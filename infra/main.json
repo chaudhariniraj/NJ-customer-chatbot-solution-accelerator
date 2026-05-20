@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "422194726574799670"
+      "templateHash": "14388241547075542875"
     }
   },
   "parameters": {
@@ -277,6 +277,7 @@
     "virtualNetworkResourceName": "[format('vnet-{0}', variables('solutionSuffix'))]",
     "bastionResourceName": "[format('bas-{0}', variables('solutionSuffix'))]",
     "maintenanceConfigurationResourceName": "[format('mc-{0}', variables('solutionSuffix'))]",
+    "dcrLogAnalyticsDestinationName": "[format('la-{0}-destination', variables('logAnalyticsWorkspaceResourceName'))]",
     "dataCollectionRulesResourceName": "[format('dcr-{0}', variables('solutionSuffix'))]",
     "proximityPlacementGroupResourceName": "[format('ppg-{0}', variables('solutionSuffix'))]",
     "virtualMachineResourceName": "[format('vm-{0}', variables('solutionSuffix'))]",
@@ -381,7 +382,7 @@
       }
     ],
     "webServerFarmResourceName": "[format('asp-{0}', variables('solutionSuffix'))]",
-    "reactAppLayoutConfig": "{\n  \"appConfig\": {\n      \"CHAT_CHATHISTORY\": {\n        \"CHAT\": 70,\n        \"CHATHISTORY\": 30\n      }\n    }\n  }\n}",
+    "reactAppLayoutConfig": "{\r\n  \"appConfig\": {\r\n      \"CHAT_CHATHISTORY\": {\r\n        \"CHAT\": 70,\r\n        \"CHATHISTORY\": 30\r\n      }\r\n    }\r\n  }\r\n}",
     "backendWebSiteResourceName": "[format('api-{0}', variables('solutionSuffix'))]",
     "aiProjectResourceId": "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiFoundryAiServicesResourceName'), variables('aiFoundryAiProjectResourceName'))]",
     "webSiteResourceName": "[format('app-{0}', variables('solutionSuffix'))]"
@@ -9530,7 +9531,7 @@
                 "logAnalytics": [
                   {
                     "workspaceResourceId": "[if(variables('useExistingLogAnalytics'), parameters('existingLogAnalyticsWorkspaceId'), reference('logAnalyticsWorkspace').outputs.resourceId.value)]",
-                    "name": "la--1264800308"
+                    "name": "[variables('dcrLogAnalyticsDestinationName')]"
                   }
                 ]
               },
@@ -9540,7 +9541,7 @@
                     "Microsoft-Perf"
                   ],
                   "destinations": [
-                    "la--1264800308"
+                    "[variables('dcrLogAnalyticsDestinationName')]"
                   ],
                   "transformKql": "source",
                   "outputStream": "Microsoft-Perf"
@@ -9550,7 +9551,7 @@
                     "Microsoft-Event"
                   ],
                   "destinations": [
-                    "la--1264800308"
+                    "[variables('dcrLogAnalyticsDestinationName')]"
                   ],
                   "transformKql": "source",
                   "outputStream": "Microsoft-Event"
@@ -27314,9 +27315,9 @@
       },
       "dependsOn": [
         "aiFoundryAiServices",
+        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').aiServices)]",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').cognitiveServices)]",
-        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
         "virtualNetwork"
       ]
     },
