@@ -382,7 +382,7 @@
       }
     ],
     "webServerFarmResourceName": "[format('asp-{0}', variables('solutionSuffix'))]",
-    "reactAppLayoutConfig": "{\r\n  \"appConfig\": {\r\n      \"CHAT_CHATHISTORY\": {\r\n        \"CHAT\": 70,\r\n        \"CHATHISTORY\": 30\r\n      }\r\n    }\r\n  }\r\n}",
+    "reactAppLayoutConfig": "{\n  \"appConfig\": {\n      \"CHAT_CHATHISTORY\": {\n        \"CHAT\": 70,\n        \"CHATHISTORY\": 30\n      }\n    }\n  }\n}",
     "backendWebSiteResourceName": "[format('api-{0}', variables('solutionSuffix'))]",
     "aiProjectResourceId": "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiFoundryAiServicesResourceName'), variables('aiFoundryAiProjectResourceName'))]",
     "webSiteResourceName": "[format('app-{0}', variables('solutionSuffix'))]"

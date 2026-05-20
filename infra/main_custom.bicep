@@ -469,12 +469,17 @@ module windowsVmDataCollectionRules 'br/public:avm/res/insights/data-collection-
             streams: [
               'Microsoft-Event'
             ]
-            // Keywords bitmask 13510798882111488 = 0x30000000000000 selects Audit Success (0x20000000000000)
-            // and Audit Failure (0x10000000000000) security events. EventID 4624 (successful logon) is
-            // excluded to reduce noise while still capturing logon failures (4625) and other audited activity.
-            // Required by SFI control Azure_VirtualMachine_Audit_Enable_DataCollectionRule.
+            // Collect high-value Security audit events required by SFI control
+            // Azure_VirtualMachine_Audit_Enable_DataCollectionRule.
+            // Scoped to specific Event IDs to limit ingestion cost:
+            //   4625 - Failed logon            4648 - Explicit credential logon
+            //   4672 - Special privileges      4719 - Audit policy changed
+            //   4720 - Account created         4722 - Account enabled
+            //   4724 - Password reset          4725 - Account disabled
+            //   4726 - Account deleted          4732 - Member added to local group
+            //   4740 - Account locked out       4756 - Member added to universal group
             xPathQueries: [
-              'Security!*[System[(band(Keywords,13510798882111488)) and (EventID != 4624)]]'
+              'Security!*[System[(EventID=4625 or EventID=4648 or EventID=4672 or EventID=4719 or EventID=4720 or EventID=4722 or EventID=4724 or EventID=4725 or EventID=4726 or EventID=4732 or EventID=4740 or EventID=4756)]]'
             ]
           }
         ]
