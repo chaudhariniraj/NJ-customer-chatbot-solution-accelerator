@@ -307,5 +307,5 @@ jobs:
       AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ needs.validate-inputs.outputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
       AZURE_EXISTING_AIPROJECT_RESOURCE_ID: ${{ needs.validate-inputs.outputs.AZURE_EXISTING_AIPROJECT_RESOURCE_ID }}
       existing_webapp_url: ${{ needs.validate-inputs.outputs.existing_webapp_url }}
-      trigger_type: ${{ github.event_name }}
+      trigger_type: workflow_run  # TEMP: force auto-trigger path for testing on psl-fix-pipeline
     secrets: inherit
