@@ -501,7 +501,7 @@ fi
 # Re-enable exit on error
 set -e
 
-echo "Checking if the principal has Azure AI User role on the AI Foundry"
+echo "Checking if the principal has Foundry User role on the AI Foundry"
 
 if [ "$SKIP_ROLE_ASSIGNMENT" != "true" ] && [ -n "$signed_user_id" ]; then
     role_assignment=$(MSYS_NO_PATHCONV=1 az role assignment list \
@@ -511,7 +511,7 @@ if [ "$SKIP_ROLE_ASSIGNMENT" != "true" ] && [ -n "$signed_user_id" ]; then
       --query "[].roleDefinitionId" -o tsv)
 
     if [ -z "$role_assignment" ]; then
-        echo "Principal does not have the Azure AI User role. Assigning the role..."
+        echo "Principal does not have the Foundry User role. Assigning the role..."
         MSYS_NO_PATHCONV=1 az role assignment create \
           --assignee "$signed_user_id" \
           --role "53ca6127-db72-4b80-b1b0-d745d6d5456d" \
@@ -519,13 +519,13 @@ if [ "$SKIP_ROLE_ASSIGNMENT" != "true" ] && [ -n "$signed_user_id" ]; then
           --output none
 
         if [ $? -eq 0 ]; then
-            echo "Azure AI User role assigned successfully."
+            echo "Foundry User role assigned successfully."
         else
-            echo "Failed to assign Azure AI User role."
+            echo "Failed to assign Foundry User role."
             exit 1
         fi
     else
-        echo "Principal already has the Azure AI User role."
+        echo "Principal already has the Foundry User role."
     fi
 else
     echo "Skipping role assignment (will rely on existing permissions)"

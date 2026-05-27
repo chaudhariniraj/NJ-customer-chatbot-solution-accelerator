@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.42.1.51946",
-      "templateHash": "11387055216723929134"
+      "version": "0.43.8.12551",
+      "templateHash": "3397418500395975370"
     }
   },
   "parameters": {
@@ -381,7 +381,7 @@
       }
     ],
     "webServerFarmResourceName": "[format('asp-{0}', variables('solutionSuffix'))]",
-    "reactAppLayoutConfig": "{\r\n  \"appConfig\": {\r\n      \"CHAT_CHATHISTORY\": {\r\n        \"CHAT\": 70,\r\n        \"CHATHISTORY\": 30\r\n      }\r\n    }\r\n  }\r\n}",
+    "reactAppLayoutConfig": "{\n  \"appConfig\": {\n      \"CHAT_CHATHISTORY\": {\n        \"CHAT\": 70,\n        \"CHATHISTORY\": 30\n      }\n    }\n  }\n}",
     "backendWebSiteResourceName": "[format('api-{0}', variables('solutionSuffix'))]",
     "aiProjectResourceId": "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiFoundryAiServicesResourceName'), variables('aiFoundryAiProjectResourceName'))]",
     "webSiteResourceName": "[format('app-{0}', variables('solutionSuffix'))]"
@@ -4420,8 +4420,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "14206227996098979620"
+              "version": "0.43.8.12551",
+              "templateHash": "3334983351757312195"
             }
           },
           "definitions": {
@@ -23733,8 +23733,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "17764186322048334660"
+              "version": "0.43.8.12551",
+              "templateHash": "5288388528788440524"
             }
           },
           "definitions": {
@@ -27297,8 +27297,8 @@
       "dependsOn": [
         "aiFoundryAiServices",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').cognitiveServices)]",
-        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').aiServices)]",
         "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').openAI)]",
+        "[format('avmPrivateDnsZones[{0}]', variables('dnsZoneIndex').aiServices)]",
         "virtualNetwork"
       ]
     },
@@ -29450,8 +29450,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "977847065221098560"
+              "version": "0.43.8.12551",
+              "templateHash": "1735625309877492934"
             }
           },
           "parameters": {
@@ -29550,8 +29550,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "5411608621965957651"
+              "version": "0.43.8.12551",
+              "templateHash": "1433080150197323850"
             }
           },
           "parameters": {
@@ -36444,8 +36444,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "13609531051773905187"
+              "version": "0.43.8.12551",
+              "templateHash": "15490584693408563123"
             }
           },
           "definitions": {
@@ -37451,8 +37451,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.42.1.51946",
-                      "templateHash": "11459765709838723797"
+                      "version": "0.43.8.12551",
+                      "templateHash": "16163995530530399452"
                     },
                     "name": "Site App Settings",
                     "description": "This module deploys a Site App Setting."
@@ -38374,8 +38374,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38494,8 +38494,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38608,8 +38608,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38725,8 +38725,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38843,8 +38843,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "211794335954355709"
+              "version": "0.43.8.12551",
+              "templateHash": "11416468254207116029"
             }
           },
           "parameters": {
@@ -38998,8 +38998,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.42.1.51946",
-              "templateHash": "13609531051773905187"
+              "version": "0.43.8.12551",
+              "templateHash": "15490584693408563123"
             }
           },
           "definitions": {
@@ -40005,8 +40005,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.42.1.51946",
-                      "templateHash": "11459765709838723797"
+                      "version": "0.43.8.12551",
+                      "templateHash": "16163995530530399452"
                     },
                     "name": "Site App Settings",
                     "description": "This module deploys a Site App Setting."
