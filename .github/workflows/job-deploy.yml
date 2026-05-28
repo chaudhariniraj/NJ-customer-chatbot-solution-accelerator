@@ -307,6 +307,202 @@ jobs:
         shell: bash
         run: exit 1
       
+      - name: Check Azure Search Service Quota
+        id: search-quota-check
+        shell: bash
+        env:
+          INPUT_AZURE_LOCATION: ${{ inputs.azure_location }}
+          TRIGGER_TYPE: ${{ inputs.trigger_type }}
+          ALLOWED_AZURE_LOCATIONS: ${{ vars.AZURE_NONAI_LOCATIONS }}
+        run: |
+          # Determine search tier based on WAF (scalability) setting
+          # WAF enabled → standard tier, WAF disabled → basic tier
+          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
+            SEARCH_TIER="standard"
+            SEARCH_TIER_DISPLAY="Standard"
+          else
+            SEARCH_TIER="basic"
+            SEARCH_TIER_DISPLAY="Basic"
+          fi
+
+          # Helper: check Azure Search quota in a single region.
+          # Echoes a status string and sets TIER_AVAILABLE as a global.
+          check_region_quota() {
+            local REGION="$1"
+            SEARCH_USAGE=$(az rest --method get \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/providers/Microsoft.Search/locations/${REGION}/usages?api-version=2024-03-01-preview" \
+              -o json 2>/dev/null || echo '{"value":[]}')
+
+            if [ "$(echo "$SEARCH_USAGE" | jq '.value | length')" -eq 0 ]; then
+              echo "   ⚠️ Could not retrieve Azure Search quota for $REGION. Skipping."
+              TIER_AVAILABLE=-1
+              return
+            fi
+
+            # Wrap in array + `first // 0` so missing tier entries yield 0 (not empty string).
+            # Also guard with ${var:-0} to avoid arithmetic errors if jq returns null/empty.
+            TIER_USAGE=$(echo "$SEARCH_USAGE" | jq -r --arg tier "$SEARCH_TIER" '[.value[] | select(.name.value == $tier) | .currentValue] | first // 0')
+            TIER_LIMIT=$(echo "$SEARCH_USAGE" | jq -r --arg tier "$SEARCH_TIER" '[.value[] | select(.name.value == $tier) | .limit] | first // 0')
+            TIER_USAGE=${TIER_USAGE:-0}
+            TIER_LIMIT=${TIER_LIMIT:-0}
+            TIER_AVAILABLE=$((TIER_LIMIT - TIER_USAGE))
+            echo "   $SEARCH_TIER_DISPLAY Tier: Used=$TIER_USAGE | Limit=$TIER_LIMIT | Available=$TIER_AVAILABLE"
+          }
+
+          # Parse allowed regions list (used by automatic triggers AND as fallback report for manual triggers)
+          ALLOWED_REGIONS=()
+          if [[ -n "$ALLOWED_AZURE_LOCATIONS" ]]; then
+            IFS=', ' read -r -a ALLOWED_REGIONS <<< "$ALLOWED_AZURE_LOCATIONS"
+          fi
+
+          SEARCH_VALID_REGION=""
+          CHECKED_REGIONS=()
+          MANUAL_USER_REGION_FAILED=false
+
+          if [[ "$TRIGGER_TYPE" == "workflow_dispatch" && -n "$INPUT_AZURE_LOCATION" ]]; then
+            # ─── MANUAL TRIGGER ───
+            # 1) Check ONLY the user-selected region to decide pass/fail
+            # 2) If it fails, still scan other allowed regions for reporting purposes
+            #    and FAIL the deployment (do NOT fall back)
+            echo "📋 Manual trigger: checking user-selected region '$INPUT_AZURE_LOCATION'"
+            echo ""
+            echo "----------------------------------------"
+            echo "🔍 Checking user-selected region: $INPUT_AZURE_LOCATION"
+            check_region_quota "$INPUT_AZURE_LOCATION"
+            if [ "$TIER_AVAILABLE" -ge 1 ]; then
+              echo "   ✅ Region '$INPUT_AZURE_LOCATION' has sufficient Azure Search $SEARCH_TIER_DISPLAY quota!"
+              SEARCH_VALID_REGION="$INPUT_AZURE_LOCATION"
+              CHECKED_REGIONS+=("$INPUT_AZURE_LOCATION: ✅ available=$TIER_AVAILABLE (user-selected)")
+            else
+              echo "   ❌ Insufficient quota in user-selected region '$INPUT_AZURE_LOCATION'"
+              MANUAL_USER_REGION_FAILED=true
+              if [ "$TIER_AVAILABLE" -lt 0 ]; then
+                CHECKED_REGIONS+=("$INPUT_AZURE_LOCATION: ⚠️ skipped (user-selected)")
+              else
+                CHECKED_REGIONS+=("$INPUT_AZURE_LOCATION: ❌ available=$TIER_AVAILABLE (user-selected)")
+              fi
+
+              # Informational scan of other allowed regions (does NOT override failure)
+              if [ ${#ALLOWED_REGIONS[@]} -gt 0 ]; then
+                echo ""
+                echo "ℹ️ Scanning other allowed regions for informational reporting..."
+                for REGION in "${ALLOWED_REGIONS[@]}"; do
+                  if [[ "$REGION" == "$INPUT_AZURE_LOCATION" ]]; then
+                    continue
+                  fi
+                  echo "----------------------------------------"
+                  echo "🔍 Checking region: $REGION"
+                  check_region_quota "$REGION"
+                  if [ "$TIER_AVAILABLE" -lt 0 ]; then
+                    CHECKED_REGIONS+=("$REGION: ⚠️ skipped")
+                  elif [ "$TIER_AVAILABLE" -ge 1 ]; then
+                    CHECKED_REGIONS+=("$REGION: ✅ available=$TIER_AVAILABLE")
+                  else
+                    CHECKED_REGIONS+=("$REGION: ❌ available=$TIER_AVAILABLE")
+                  fi
+                done
+              fi
+            fi
+          else
+            # ─── AUTOMATIC TRIGGER ───
+            # Iterate allowed regions; pick the first with available capacity.
+            echo "📋 Automatic trigger: checking allowed regions from GitHub variable AZURE_NONAI_LOCATIONS"
+            if [ ${#ALLOWED_REGIONS[@]} -eq 0 ]; then
+              echo "❌ ERROR: GitHub variable 'AZURE_NONAI_LOCATIONS' is empty. Cannot determine regions to check."
+              exit 1
+            fi
+            echo "🔍 Checking Azure Search $SEARCH_TIER_DISPLAY tier quota across regions: ${ALLOWED_REGIONS[*]}"
+            echo ""
+            for REGION in "${ALLOWED_REGIONS[@]}"; do
+              echo "----------------------------------------"
+              echo "🔍 Checking region: $REGION"
+              check_region_quota "$REGION"
+              if [ "$TIER_AVAILABLE" -lt 0 ]; then
+                CHECKED_REGIONS+=("$REGION: ⚠️ skipped")
+                continue
+              fi
+              if [ "$TIER_AVAILABLE" -ge 1 ]; then
+                echo "   ✅ Region '$REGION' has sufficient Azure Search $SEARCH_TIER_DISPLAY quota!"
+                SEARCH_VALID_REGION="$REGION"
+                CHECKED_REGIONS+=("$REGION: ✅ available=$TIER_AVAILABLE")
+                break
+              else
+                echo "   ❌ Insufficient quota in $REGION"
+                CHECKED_REGIONS+=("$REGION: ❌ available=$TIER_AVAILABLE")
+              fi
+            done
+          fi
+
+          echo ""
+          echo "========================================"
+
+          # ─── Manual trigger: user-selected region failed → FAIL with report ───
+          if [[ "$MANUAL_USER_REGION_FAILED" == "true" ]]; then
+            echo "❌ User-selected region '$INPUT_AZURE_LOCATION' does not have sufficient Azure Search $SEARCH_TIER_DISPLAY tier quota."
+            echo ""
+            echo "Regions scanned:"
+            for entry in "${CHECKED_REGIONS[@]}"; do
+              echo "  - $entry"
+            done
+
+            echo "## ❌ Azure Search Quota Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "User-selected region **\`$INPUT_AZURE_LOCATION\`** does not have sufficient Azure Search **$SEARCH_TIER_DISPLAY** tier quota." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Deployment has been failed because the user-selected region does not meet quota. Please re-trigger the workflow with one of the available regions listed below." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Filter to only regions with available quota
+            AVAILABLE_REGIONS=()
+            for entry in "${CHECKED_REGIONS[@]}"; do
+              if [[ "$entry" == *"✅"* ]]; then
+                AVAILABLE_REGIONS+=("$entry")
+              fi
+            done
+
+            if [ ${#AVAILABLE_REGIONS[@]} -gt 0 ]; then
+              echo "### ✅ Regions with available Azure Search $SEARCH_TIER_DISPLAY quota" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Region | Status |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+              for entry in "${AVAILABLE_REGIONS[@]}"; do
+                region="${entry%%:*}"
+                status="${entry#*: }"
+                echo "| \`$region\` | $status |" >> $GITHUB_STEP_SUMMARY
+              done
+            else
+              echo "### ⚠️ No other allowed regions currently have available Azure Search $SEARCH_TIER_DISPLAY quota." >> $GITHUB_STEP_SUMMARY
+            fi
+            exit 1
+          fi
+
+          # ─── Automatic trigger: nothing available → FAIL with report ───
+          if [ -z "$SEARCH_VALID_REGION" ]; then
+            echo "❌ No region with sufficient Azure Search $SEARCH_TIER_DISPLAY tier quota found!"
+            echo ""
+            echo "Regions checked:"
+            for entry in "${CHECKED_REGIONS[@]}"; do
+              echo "  - $entry"
+            done
+
+            echo "## ❌ Azure Search Quota Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No region in \`AZURE_NONAI_LOCATIONS\` has sufficient Azure Search **$SEARCH_TIER_DISPLAY** tier quota." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Region | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+            for entry in "${CHECKED_REGIONS[@]}"; do
+              region="${entry%%:*}"
+              status="${entry#*: }"
+              echo "| \`$region\` | $status |" >> $GITHUB_STEP_SUMMARY
+            done
+            exit 1
+          fi
+
+          echo "✅ Selected region with Azure Search quota: $SEARCH_VALID_REGION"
+          echo "SEARCH_VALID_REGION=$SEARCH_VALID_REGION" >> $GITHUB_ENV
+          echo "SEARCH_VALID_REGION=$SEARCH_VALID_REGION" >> $GITHUB_OUTPUT
+
       - name: Set Deployment Region
         id: set_region
         shell: bash
@@ -314,19 +510,19 @@ jobs:
           INPUT_TRIGGER_TYPE: ${{ inputs.trigger_type }}
           INPUT_AZURE_LOCATION: ${{ inputs.azure_location }}
         run: |
-          echo "Selected Region from Quota Check: $VALID_REGION"
+          echo "Selected AI Service Region (QuotaRegions from GPT quota check): $VALID_REGION"
           echo "AZURE_ENV_AI_SERVICE_LOCATION=$VALID_REGION" >> $GITHUB_ENV
           echo "AZURE_ENV_AI_SERVICE_LOCATION=$VALID_REGION" >> $GITHUB_OUTPUT
-          
+
+          # AZURE_LOCATION = region validated by Azure Search service quota check
+          echo "Selected Deployment Region (from Search quota check): $SEARCH_VALID_REGION"
+          echo "AZURE_LOCATION=$SEARCH_VALID_REGION" >> $GITHUB_ENV
+          echo "AZURE_LOCATION=$SEARCH_VALID_REGION" >> $GITHUB_OUTPUT
+
           if [[ "$INPUT_TRIGGER_TYPE" == "workflow_dispatch" && -n "$INPUT_AZURE_LOCATION" ]]; then
-            USER_SELECTED_LOCATION="$INPUT_AZURE_LOCATION"
-            echo "Using user-selected Azure location: $USER_SELECTED_LOCATION"
-            echo "AZURE_LOCATION=$USER_SELECTED_LOCATION" >> $GITHUB_ENV
-            echo "AZURE_LOCATION=$USER_SELECTED_LOCATION" >> $GITHUB_OUTPUT
+            echo "ℹ️ Manual trigger: AZURE_LOCATION resolved to user-selected region '$INPUT_AZURE_LOCATION'"
           else
-            echo "Using location from quota check for automatic triggers: $VALID_REGION"
-            echo "AZURE_LOCATION=$VALID_REGION" >> $GITHUB_ENV
-            echo "AZURE_LOCATION=$VALID_REGION" >> $GITHUB_OUTPUT
+            echo "ℹ️ Automatic trigger: AZURE_LOCATION resolved from allowed regions list"
           fi
 
       - name: Generate Resource Group Name
