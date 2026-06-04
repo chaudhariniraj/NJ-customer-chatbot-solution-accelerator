@@ -32,7 +32,17 @@ class WebUserPage(BasePage):
             timeout=10000
         )
         send_button.click()
-        self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=30000)
+        # First wait for generation to actually START (stop button appears),
+        # then wait for it to finish. Without the appear-wait, wait_for(state="hidden")
+        # returns immediately if the stop button hasn't mounted yet, causing the test
+        # to read a stale/empty response.
+        stop_btn = self.page.locator(self.STOP_GENERATING_LABEL)
+        try:
+            stop_btn.wait_for(state="visible", timeout=15000)
+        except PlaywightTimeoutError:
+            # Some very short replies may never render the stop button; that's OK.
+            pass
+        stop_btn.wait_for(state="hidden", timeout=60000)
 
     def open_chat_window(self):
         """Click on the Open Chat button to open the chat window"""
@@ -44,11 +54,18 @@ class WebUserPage(BasePage):
 
     def wait_for_response(self, timeout=30000):
         """Wait for the chat response to appear"""
-        # Wait for stop generating button to disappear (indicating response is complete)
+        # Wait for stop generating button to appear first, then disappear.
+        # state="hidden" alone returns immediately when the element isn't mounted yet,
+        # which races against slow/cold-start backends.
+        stop_btn = self.page.locator(self.STOP_GENERATING_LABEL)
         try:
-            self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=timeout)
+            stop_btn.wait_for(state="visible", timeout=15000)
         except Exception:
-            # If stop generating button doesn't appear, just wait a bit
+            # Stop button may not appear for very short replies; continue.
+            pass
+        try:
+            stop_btn.wait_for(state="hidden", timeout=timeout)
+        except Exception:
             pass
         
         # Wait for AI response to appear by looking for response indicators
@@ -231,7 +248,9 @@ class WebUserPage(BasePage):
         # Wait for response with longer timeout
         self.wait_for_response(timeout=45000)
         
-        # Wait for a NEW response to appear (response count should increase)
+        # Wait for a NEW response to appear (response count must increase).
+        # Previously this silently swallowed timeouts, causing the test to read
+        # the prior (stale) AI bubble and assert against the wrong question.
         try:
             self.page.wait_for_function(
                 f"""(expectedCount) => {{
@@ -239,21 +258,50 @@ class WebUserPage(BasePage):
                     return responses.length > expectedCount;
                 }}""",
                 arg=initial_response_count,
-                timeout=60000
+                timeout=90000
             )
-        except PlaywightTimeoutError:
-            pass  # Timeout waiting for AI response is expected in some test scenarios.
+        except PlaywightTimeoutError as e:
+            raise AssertionError(
+                f"No new AI response appeared within 90s for question: {question!r}. "
+                f"Initial bubble count={initial_response_count}, still unchanged."
+            ) from e
         
         # Wait extra time to ensure new response has fully loaded
         self.page.wait_for_timeout(5000)
         
-        # Get the LATEST response specifically (the last one in the list)
-        response = self.get_latest_ai_response()
+        # Read the NEW bubble directly by index (deterministic).
+        # The previous heuristic-based get_latest_ai_response() could silently
+        # fall back to an earlier bubble when the new response tripped the
+        # product-card filter, causing stale-text assertions.
+        response = self.get_new_ai_response(initial_response_count)
         
         # Verify response contains expected content
         contains_keyword, found_keyword = self.verify_response_contains_keywords(response, expected_keywords)
         
         return response, contains_keyword, found_keyword
+
+    def get_new_ai_response(self, initial_count):
+        """Return the text of the newly appended AI response bubble.
+
+        Deterministic: picks the last bubble strictly after `initial_count`,
+        which is the one just produced by the most recent question. Falls back
+        to the heuristic extractor only if the direct read yields nothing.
+        """
+        import re
+        ai_response_selector = 'div[class*="bg-muted"]'
+        bubbles = self.page.locator(ai_response_selector)
+        total = bubbles.count()
+        if total > initial_count:
+            # The newest bubble appended after the question is the last one.
+            try:
+                text = bubbles.nth(total - 1).text_content() or ""
+                cleaned = re.sub(r'\s+', ' ', text).strip()
+                if cleaned:
+                    return cleaned
+            except Exception:
+                pass
+        # Fallback: heuristic extractor
+        return self.get_latest_ai_response()
     
     def get_latest_ai_response(self):
         """Get the text content of the LATEST/MOST RECENT AI response only"""

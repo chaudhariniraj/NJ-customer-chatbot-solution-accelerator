@@ -61,6 +61,9 @@ class TestBYOCCGoldenPath:
         # Step 1: Open chat window
         logger.info("Opening chat window...")
         web_user_page.open_chat_window()
+        # Warm-up for cold-started Azure Web App so the first question doesn't race
+        # against backend initialization.
+        page.wait_for_timeout(5000)
         
         # Take screenshot after opening chat
         self._take_screenshot(page, "02_chat_opened")
