@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/primitives/avatar';
 import { Button } from '@/components/primitives/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { redirectToEasyAuthLogin } from '@/lib/utils/authRedirect';
 import {
   Menu,
   MenuDivider,
@@ -97,7 +98,7 @@ export function LoginButton() {
         variant="default"
         size="small"
         onClick={() => {
-          window.location.href = '/.auth/login/aad';
+          redirectToEasyAuthLogin();
         }}
         className="transition-all duration-200 flex items-center gap-2"
         title="Login with Microsoft"

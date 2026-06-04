@@ -1,4 +1,5 @@
 import { normalizeApiError } from '@/lib/utils/apiUtils';
+import { redirectToEasyAuthLogin, shouldTriggerEasyAuthRedirect } from '@/lib/utils/authRedirect';
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 let cachedEasyAuthHeaders: Record<string, string> | null = null;
@@ -45,6 +46,7 @@ class HttpClient {
       withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
       },
       paramsSerializer: {
         serialize: serializeParams,
@@ -63,7 +65,18 @@ class HttpClient {
 
     this.client.interceptors.response.use(
       (response) => response,
-      (error) => Promise.reject(normalizeApiError(error, 'Request failed')),
+      (error) => {
+        const status: number | undefined = error?.response?.status;
+        const responseUrl: string | undefined = error?.request?.responseURL;
+        const requestUrl: string | undefined = error?.config?.url;
+        const isApiRequest = typeof requestUrl === 'string' && requestUrl.includes('/api/');
+
+        if (isApiRequest && shouldTriggerEasyAuthRedirect(status, responseUrl)) {
+          redirectToEasyAuthLogin();
+        }
+
+        return Promise.reject(normalizeApiError(error, 'Request failed'));
+      },
     );
   }
 

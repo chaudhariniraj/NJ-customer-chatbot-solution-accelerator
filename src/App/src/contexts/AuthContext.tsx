@@ -1,4 +1,5 @@
 import { api, setEasyAuthHeaders } from '@/lib/utils/httpClient';
+import { clearEasyAuthRedirectGuard, redirectToEasyAuthLogin } from '@/lib/utils/authRedirect';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 export interface User {
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const easyAuthHeaders = await fetchEasyAuthHeaders();
         if (easyAuthHeaders) {
           setEasyAuthHeaders(easyAuthHeaders);
+          clearEasyAuthRedirectGuard();
         }
         
         const response = await api.get('/api/auth/me');
@@ -137,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = () => {
-    window.location.href = '/.auth/login/aad';
+    redirectToEasyAuthLogin();
   };
 
   const logout = () => {
