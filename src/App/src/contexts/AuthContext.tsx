@@ -1,5 +1,5 @@
-import { api, setEasyAuthHeaders } from '@/lib/utils/httpClient';
 import { clearEasyAuthRedirectGuard, redirectToEasyAuthLogin } from '@/lib/utils/authRedirect';
+import { api, setEasyAuthHeaders } from '@/lib/utils/httpClient';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 export interface User {

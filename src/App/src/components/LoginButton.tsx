@@ -3,12 +3,12 @@ import { Button } from '@/components/primitives/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { redirectToEasyAuthLogin } from '@/lib/utils/authRedirect';
 import {
-  Menu,
-  MenuDivider,
-  MenuItem,
-  MenuList,
-  MenuPopover,
-  MenuTrigger,
+    Menu,
+    MenuDivider,
+    MenuItem,
+    MenuList,
+    MenuPopover,
+    MenuTrigger,
 } from '@fluentui/react-components';
 import { Person20Regular, SignOut20Regular } from '@fluentui/react-icons';
 import { ShieldWarning, Spinner } from '@phosphor-icons/react';
