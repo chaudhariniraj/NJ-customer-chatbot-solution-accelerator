@@ -89,6 +89,10 @@ function App() {
 
   useEffect(() => {
     if (isAuthenticated && currentSessionId) {
+      if (skipNextSessionFetchRef.current) {
+        skipNextSessionFetchRef.current = false;
+        return;
+      }
       fetchMessages(currentSessionId).catch(() => {
         toast.error('Failed to load chat history');
       });
@@ -200,6 +204,10 @@ function App() {
   // WebSocket handler race and the assistant save can reach the server first,
   // causing wrong message order in the DB and in the UI after a refetch.
   const voiceMessageQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // When a voice message creates a new session, skip the fetchMessages triggered
+  // by the currentSessionId useEffect — messages are already managed locally and
+  // a server fetch would race with the assistant response, overwriting it.
+  const skipNextSessionFetchRef = useRef(false);
 
   const handleVoiceMessage = useCallback((text: string, role: 'user' | 'assistant') => {
     voiceMessageQueueRef.current = voiceMessageQueueRef.current
@@ -216,6 +224,7 @@ function App() {
             const sessionData = await createNewChatSession();
             sessionId = sessionData.session_id;
             saveCurrentSessionId(sessionId);
+            skipNextSessionFetchRef.current = true;
             dispatch(setCurrentSessionId(sessionId));
           } catch {
             toast.error('Failed to start chat session');
