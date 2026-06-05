@@ -319,13 +319,6 @@ class VoiceLiveHandler:
                 return
             await self.send({"type": "status", "state": "listening"})
             await self.send({"type": "stop_playback"})
-            # In native agent mode, the agent manages responses — don't cancel manually
-            if not self._native_agent:
-                try:
-                    await connection.response.cancel()
-                except Exception as exc:
-                    # Best-effort cancellation; failure is non-fatal but logged for diagnostics.
-                    logger.debug("[%s] Failed to cancel existing response: %s", self.client_id, exc)
 
         elif event_type == ServerEventType.INPUT_AUDIO_BUFFER_SPEECH_STOPPED.value:
             if self._is_processing:

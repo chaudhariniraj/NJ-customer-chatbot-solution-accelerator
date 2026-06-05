@@ -624,7 +624,7 @@ async def test_handle_event_speech_started():
     calls = [c[0][0] for c in send_fn.call_args_list]
     assert any(m.get("type") == "status" and m.get("state") == "listening" for m in calls)
     assert any(m.get("type") == "stop_playback" for m in calls)
-    conn.response.cancel.assert_awaited()
+    conn.response.cancel.assert_not_awaited()
 
 
 @pytest.mark.asyncio
