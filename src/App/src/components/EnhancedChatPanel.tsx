@@ -680,6 +680,18 @@ export const EnhancedChatPanel = ({
 
         if (message.type === 'session_started') {
           sessionReadyRef.current = true;
+
+          // Flush any microphone audio captured before the backend session became
+          // ready. Without this drain, a user who finishes speaking during
+          // startup can lose the first prompt entirely.
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN && audioBufferQueueRef.current.length > 0) {
+            while (audioBufferQueueRef.current.length > 0) {
+              const buffered = audioBufferQueueRef.current.shift()!;
+              ws.send(JSON.stringify({ type: 'audio_chunk', data: buffered }));
+            }
+          }
+
           setVoiceSessionState('listening');
           setVoiceError(null);
           setIsVoiceTransitioning(false);
