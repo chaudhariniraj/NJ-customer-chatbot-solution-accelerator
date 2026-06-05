@@ -200,6 +200,7 @@ function App() {
   // WebSocket handler race and the assistant save can reach the server first,
   // causing wrong message order in the DB and in the UI after a refetch.
   const voiceMessageQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const voiceSessionCreationRef = useRef<Promise<string> | null>(null);
 
   const handleVoiceMessage = useCallback((text: string, role: 'user' | 'assistant') => {
     voiceMessageQueueRef.current = voiceMessageQueueRef.current
@@ -209,22 +210,39 @@ function App() {
         // propagated the newly created session ID yet.
         let sessionId = currentSessionId || getCurrentSessionId();
 
+        const ensureVoiceSession = async (): Promise<string> => {
+          const existingSessionId = currentSessionId || getCurrentSessionId();
+          if (existingSessionId) {
+            return existingSessionId;
+          }
+
+          if (!voiceSessionCreationRef.current) {
+            voiceSessionCreationRef.current = createNewChatSession()
+              .then((sessionData) => {
+                saveCurrentSessionId(sessionData.session_id);
+                dispatch(setCurrentSessionId(sessionData.session_id));
+                return sessionData.session_id;
+              })
+              .finally(() => {
+                voiceSessionCreationRef.current = null;
+              });
+          }
+
+          return voiceSessionCreationRef.current;
+        };
+
         // Create a chat session on the first voice message so the prompt is
         // stored under a real session key and the welcome screen is replaced.
-        if (!sessionId && role === 'user') {
+        if (!sessionId) {
           try {
-            const sessionData = await createNewChatSession();
-            sessionId = sessionData.session_id;
-            saveCurrentSessionId(sessionId);
-            dispatch(setCurrentSessionId(sessionId));
+            sessionId = await ensureVoiceSession();
           } catch {
             toast.error('Failed to start chat session');
             return;
           }
         }
 
-        // Guard: if sessionId is still null (e.g. assistant message arrived
-        // before session was created), skip.
+        // Guard: if session creation still failed, skip the message.
         if (!sessionId) {
           return;
         }
