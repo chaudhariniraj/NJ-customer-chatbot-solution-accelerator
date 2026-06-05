@@ -1,5 +1,5 @@
-import React from 'react';
 import { Product } from '@/lib/types';
+import React from 'react';
 
 interface ChatProductCardProps {
   product: Product;
@@ -16,6 +16,7 @@ export const ChatProductCard: React.FC<ChatProductCardProps> = ({
         <img
           src={product.image}
           alt={product.title}
+          loading="eager"
           className="w-full h-full object-cover"
           onError={(e) => {
             const target = e.target as HTMLImageElement;

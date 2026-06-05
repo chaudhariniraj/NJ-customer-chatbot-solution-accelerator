@@ -1,5 +1,7 @@
 import { Order, OrderItem, Product } from './types';
 
+const PRODUCT_SECTION_SPLIT_REGEX = /(?=(?:\d+\.\s*\*\*[^*]+\*\*|\*\*\d+\.\s*[^*]+\*\*))/;
+
 export function parseOrdersFromText(text: string): { orders: Order[], introText: string } {
   try {
     const orderBoundaries = findOrderBoundaries(text);
@@ -190,7 +192,7 @@ function normalizeOrderData(order: Partial<Order>): Order {
 export function parseProductsFromText(text: string): { products: Product[], introText: string, outroText: string } {
   const products: Product[] = [];
   
-  const parts = text.split(/(?=\d+\.\s*\*\*[^*]+\*\*)/);
+  const parts = text.split(PRODUCT_SECTION_SPLIT_REGEX);
   
   let introText = '';
   let outroText = '';
@@ -236,7 +238,7 @@ export function parseProductsFromText(text: string): { products: Product[], intr
 
 function parseProductSection(section: string): Product | null {
   try {
-    let nameMatch = section.match(/\d+\.\s*\*\*([^*]+)\*\*/);
+    let nameMatch = section.match(/\d+\.\s*\*\*([^*]+)\*\*/) || section.match(/^\*\*\d+\.\s*([^*]+)\*\*/);
     let title = '';
     
     if (nameMatch) {
@@ -272,7 +274,10 @@ function parseProductSection(section: string): Product | null {
     
     if (!title) return null;
     
-    const priceMatch = section.match(/\*\*Price:\*\*\s*\$([0-9,]+\.?\d*)/) || section.match(/[-–]\s*Price:\s*\$([0-9,]+\.?\d*)/);
+    const priceMatch =
+      section.match(/\*\*Price:\*\*\s*\$([0-9,]+\.?\d*)/) ||
+      section.match(/(?:^|\n)\s*Price:\s*\$([0-9,]+\.?\d*)/im) ||
+      section.match(/[-–]\s*Price:\s*\$([0-9,]+\.?\d*)/);
     const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : 59.50;
     
     const originalPriceMatch = section.match(/Originally \$([0-9,]+\.?\d*)/);
@@ -286,7 +291,7 @@ function parseProductSection(section: string): Product | null {
     
     let description = '';
     
-    const descMatch = section.match(/\*\*Description:\*\*\s*([^\n]+)/);
+    const descMatch = section.match(/\*\*Description:\*\*\s*([^\n]+)/) || section.match(/(?:^|\n)\s*Description:\s*([^\n]+)/im);
     if (descMatch) {
       description = descMatch[1].trim();
     }
@@ -385,11 +390,11 @@ export function detectContentType(text: string): 'orders' | 'products' | 'text' 
     return 'orders';
   }
   
-  const hasProductFormat = /\d+\.\s*\*\*[^*]+\*\*.*!\[/s.test(text);
-  const hasPriceAndRating = (text.includes('**Price:**') || /[-–]\s*Price:\s*\$/i.test(text)) && 
-    (text.includes('**Rating:**') || /[-–]\s*Rating:/i.test(text));
-  const hasPriceAndDescription = (text.includes('**Price:**') || /[-–]\s*Price:\s*\$/i.test(text)) &&
-    (text.includes('**Description:**') || /[-–]\s*Description:/i.test(text));
+  const hasProductFormat = /(\d+\.\s*\*\*[^*]+\*\*|\*\*\d+\.\s*[^*]+\*\*).*!\[/s.test(text);
+  const hasPriceAndRating = (text.includes('**Price:**') || /(?:^|\n)\s*Price:\s*\$/im.test(text) || /[-–]\s*Price:\s*\$/i.test(text)) && 
+    (text.includes('**Rating:**') || /(?:^|\n)\s*Rating:/im.test(text) || /[-–]\s*Rating:/i.test(text));
+  const hasPriceAndDescription = (text.includes('**Price:**') || /(?:^|\n)\s*Price:\s*\$/im.test(text) || /[-–]\s*Price:\s*\$/i.test(text)) &&
+    (text.includes('**Description:**') || /(?:^|\n)\s*Description:/im.test(text) || /[-–]\s*Description:/i.test(text));
   
   const hasImageOrLink = /!\[[^\]]+\]\([^)]+\)/.test(text) || /\[[^\]]+\]\([^)]+\.(jpg|jpeg|png|gif|webp|svg)/i.test(text);
   const hasImageWithDescription = hasImageOrLink && 

@@ -5,6 +5,8 @@ import { detectContentType, parseOrdersFromText, parseProductsFromText } from '@
 import { ChatMessage, Product } from '@/lib/types';
 import { parseChartContent } from '@/lib/utils/chartUtils';
 import { memo, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatMessageContentProps {
   message: ChatMessage;
@@ -25,6 +27,33 @@ const ErrorMessage = memo(({ content }: { content: string }) => (
   <p className="whitespace-pre-wrap text-destructive">{content}</p>
 ));
 ErrorMessage.displayName = 'ErrorMessage';
+
+const MarkdownMessage = memo(({ content }: { content: string }) => (
+  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-2 prose-ol:my-2 prose-li:my-0 prose-img:my-2 prose-img:rounded-md prose-img:border prose-img:bg-background prose-img:shadow-sm">
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
+        img: ({ src, alt }) => (
+          <img
+            src={src || ''}
+            alt={alt || 'Response image'}
+            loading="eager"
+            className="max-h-56 w-auto rounded-md border bg-background object-contain"
+          />
+        ),
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  </div>
+));
+MarkdownMessage.displayName = 'MarkdownMessage';
 
 const ChartMessage = memo(({ content }: { content: string }) => {
   const parsed = parseChartContent(content);
@@ -101,7 +130,7 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
     );
   }
 
-  return <p className="whitespace-pre-wrap">{message.content}</p>;
+  return <MarkdownMessage content={message.content} />;
 });
 AssistantMessage.displayName = 'AssistantMessage';
 

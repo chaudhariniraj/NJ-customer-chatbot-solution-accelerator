@@ -406,6 +406,10 @@ export const EnhancedChatPanel = ({
     sourceNode.connect(workletNode);
     // Connect to destination to keep the audio graph alive
     workletNode.connect(audioContext.destination);
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
   };
 
   const startVoiceSession = async () => {
