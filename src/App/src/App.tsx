@@ -301,7 +301,13 @@ function App() {
         </div>
 
         <ChatSidebar
-          key={currentSessionId ?? 'new-conversation'}
+          // NOTE: do NOT key on `currentSessionId`. During a voice turn the
+          // session ID transitions from `null` to a real ID when the user
+          // transcript arrives and `handleVoiceMessage` creates a session.
+          // Keying on it forces an unmount/remount mid-turn, which tears down
+          // the active voice WebSocket and causes the assistant response to be
+          // dropped on the user's first voice attempt. Props (messages, etc.)
+          // already drive re-renders correctly, no remount needed.
           isOpen={isChatOpen}
           messages={chatMessages}
           onSendMessage={handleSendMessage}

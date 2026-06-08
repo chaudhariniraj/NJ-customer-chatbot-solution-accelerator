@@ -1,9 +1,9 @@
 import {
-    createNewChatSession,
-    getChatHistory,
-    getCurrentSessionId,
-    saveCurrentSessionId,
-    sendMessageToChat,
+  createNewChatSession,
+  getChatHistory,
+  getCurrentSessionId,
+  saveCurrentSessionId,
+  sendMessageToChat,
 } from '@/lib/api';
 import { ChatMessage } from '@/lib/types';
 import { createErrorMessage, createUserMessage } from '@/lib/utils/messageUtils';
@@ -84,7 +84,27 @@ const chatSlice = createSlice({
       })
       .addCase(fetchConversationMessages.fulfilled, (state, action) => {
         state.currentSessionId = action.payload.sessionId;
-        state.messages = action.payload.messages;
+        // Merge server messages with local optimistic messages instead of
+        // replacing. When a voice turn creates a session mid-flow this fetch
+        // can race the in-flight `save-voice-message` POSTs; a naive replace
+        // would wipe the optimistically-dispatched assistant message and the
+        // user would only see the answer after a manual refresh.
+        // Strategy: prefer the server copy by ID, then append any local
+        // messages whose IDs are not yet on the server, sorted by timestamp.
+        const serverIds = new Set(
+          action.payload.messages.map((m) => m.id).filter(Boolean),
+        );
+        const localOnly = state.messages.filter(
+          (m) => m.id && !serverIds.has(m.id),
+        );
+        const merged = [...action.payload.messages, ...localOnly];
+        merged.sort((a, b) => {
+          const ta = new Date(a.timestamp).getTime();
+          const tb = new Date(b.timestamp).getTime();
+          if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+          return ta - tb;
+        });
+        state.messages = merged;
       })
       .addCase(fetchConversationMessages.rejected, (state) => {
         state.error = 'Failed to fetch messages';

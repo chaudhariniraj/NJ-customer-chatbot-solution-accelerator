@@ -67,6 +67,10 @@ export const EnhancedChatPanel = ({
   const isSpeakingRef = useRef(false);
   const awaitingResponseRef = useRef(false);
   const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Aborts the voice session if the backend never sends `session_started` (e.g. when
+  // Azure Voice Live cold-start exceeds the connect timeout). Without this guard a
+  // failed cold-start would leave the mic icon spinning forever.
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks whether the current voice turn has already posted the structured tool
   // result to chat history (via the early `tool_result` event). When true, the
   // final RESPONSE_DONE transcript skips re-posting to avoid duplicates.
@@ -329,6 +333,10 @@ export const EnhancedChatPanel = ({
       clearTimeout(pendingToolResultFlushTimeoutRef.current);
       pendingToolResultFlushTimeoutRef.current = null;
     }
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+    }
 
     const ws = wsRef.current;
     wsRef.current = null;
@@ -434,24 +442,14 @@ export const EnhancedChatPanel = ({
     setVoiceSessionState('connecting');
     setVoiceError(null);
 
-    // Start mic capture for backend WebSocket
-    try {
-      await startMicrophoneCapture();
-      setIsVoiceActive(true);
-      // Stay in 'connecting' — the 'listening' state is set when the
-      // WebSocket session_started event arrives, which means the backend
-      // is actually ready to accept audio input.
-    } catch (micError) {
-      console.error('Unable to start microphone capture', micError);
-      setVoiceError('Microphone access failed. Check browser permissions and try again.');
-      setIsVoiceTransitioning(false);
-      setVoiceSessionState('idle');
-      return;
-    }
+    // NOTE: Microphone capture is intentionally deferred until the backend sends
+    // `session_started` (see ws.onmessage below). On a cold start the Azure Voice
+    // Live connection can take several seconds to establish; starting the mic
+    // before then would drop the beginning of the user's first utterance because
+    // the small in-memory audio buffer overflows during the wait.
 
     if (!isVoiceEnabled) {
       setVoiceError('Voice is unavailable. Configure Azure Voice Live endpoint and key.');
-      await stopMicrophoneCapture();
       setIsVoiceActive(false);
       setIsVoiceTransitioning(false);
       setVoiceSessionState('idle');
@@ -462,7 +460,6 @@ export const EnhancedChatPanel = ({
     if (!config.enabled) {
       setIsVoiceEnabled(false);
       setVoiceError('Voice is unavailable. Configure Azure Voice Live endpoint and key.');
-      await stopMicrophoneCapture();
       setIsVoiceActive(false);
       setIsVoiceTransitioning(false);
       setVoiceSessionState('idle');
@@ -476,6 +473,20 @@ export const EnhancedChatPanel = ({
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+
+    // Safety net: if `session_started` never arrives (e.g. Azure cold-start
+    // exceeds 30s or backend connect fails), surface an error instead of
+    // leaving the UI stuck on the connecting indicator.
+    if (connectTimeoutRef.current) {
+      clearTimeout(connectTimeoutRef.current);
+    }
+    connectTimeoutRef.current = setTimeout(() => {
+      connectTimeoutRef.current = null;
+      if (!sessionReadyRef.current) {
+        setVoiceError('Voice connection timed out. Please try again.');
+        stopVoiceSession();
+      }
+    }, 30_000);
 
     ws.onopen = () => {
       ws.send(
@@ -675,10 +686,26 @@ export const EnhancedChatPanel = ({
         }
 
         if (message.type === 'session_started') {
+          // Backend is ready to accept audio — clear cold-start timeout and
+          // start the microphone now so the very first sample captured is
+          // delivered to Azure Voice Live (no buffer overflow window).
+          if (connectTimeoutRef.current) {
+            clearTimeout(connectTimeoutRef.current);
+            connectTimeoutRef.current = null;
+          }
           sessionReadyRef.current = true;
-          setVoiceSessionState('listening');
-          setVoiceError(null);
-          setIsVoiceTransitioning(false);
+          startMicrophoneCapture()
+            .then(() => {
+              setIsVoiceActive(true);
+              setVoiceSessionState('listening');
+              setVoiceError(null);
+              setIsVoiceTransitioning(false);
+            })
+            .catch(async (micError) => {
+              console.error('Unable to start microphone capture', micError);
+              setVoiceError('Microphone access failed. Check browser permissions and try again.');
+              await stopVoiceSession();
+            });
         }
 
         if (message.type === 'error' && message.message) {
@@ -990,7 +1017,7 @@ export const EnhancedChatPanel = ({
             {voiceError}
           </p>
         )}
-        {isVoiceActive && !voiceError && (
+        {(isVoiceActive || voiceSessionState === 'connecting') && !voiceError && (
           <p className="text-xs text-center" role="status" aria-live="polite">
             {voiceSessionState === 'connecting'
               ? <span className="text-primary">Starting voice...</span>
