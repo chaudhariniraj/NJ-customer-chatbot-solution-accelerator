@@ -32,7 +32,13 @@ class WebUserPage(BasePage):
             timeout=10000
         )
         send_button.click()
-        self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=30000)
+        # Wait for stop button to appear before waiting for hidden; otherwise hidden returns immediately.
+        stop_btn = self.page.locator(self.STOP_GENERATING_LABEL)
+        try:
+            stop_btn.wait_for(state="visible", timeout=15000)
+        except PlaywightTimeoutError:
+            pass
+        stop_btn.wait_for(state="hidden", timeout=60000)
 
     def open_chat_window(self):
         """Click on the Open Chat button to open the chat window"""
@@ -44,11 +50,16 @@ class WebUserPage(BasePage):
 
     def wait_for_response(self, timeout=30000):
         """Wait for the chat response to appear"""
-        # Wait for stop generating button to disappear (indicating response is complete)
+        # Wait for stop button to appear before waiting for hidden; otherwise hidden returns immediately.
+        stop_btn = self.page.locator(self.STOP_GENERATING_LABEL)
         try:
-            self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=timeout)
-        except Exception:
-            # If stop generating button doesn't appear, just wait a bit
+            stop_btn.wait_for(state="visible", timeout=15000)
+        except PlaywightTimeoutError:
+            # Short replies may never render the stop button; continue.
+            pass
+        try:
+            stop_btn.wait_for(state="hidden", timeout=timeout)
+        except PlaywightTimeoutError:
             pass
         
         # Wait for AI response to appear by looking for response indicators
@@ -231,7 +242,7 @@ class WebUserPage(BasePage):
         # Wait for response with longer timeout
         self.wait_for_response(timeout=45000)
         
-        # Wait for a NEW response to appear (response count should increase)
+        # Fail loudly if no new bubble appears; swallowing here causes stale-response assertions.
         try:
             self.page.wait_for_function(
                 f"""(expectedCount) => {{
@@ -239,21 +250,51 @@ class WebUserPage(BasePage):
                     return responses.length > expectedCount;
                 }}""",
                 arg=initial_response_count,
-                timeout=60000
+                timeout=90000
             )
-        except PlaywightTimeoutError:
-            pass  # Timeout waiting for AI response is expected in some test scenarios.
+        except PlaywightTimeoutError as e:
+            raise AssertionError(
+                f"No new AI response appeared within 90s for question: {question!r}. "
+                f"Initial bubble count={initial_response_count}, still unchanged."
+            ) from e
         
         # Wait extra time to ensure new response has fully loaded
         self.page.wait_for_timeout(5000)
-        
-        # Get the LATEST response specifically (the last one in the list)
-        response = self.get_latest_ai_response()
+
+        response = self.get_new_ai_response(initial_response_count)
         
         # Verify response contains expected content
         contains_keyword, found_keyword = self.verify_response_contains_keywords(response, expected_keywords)
         
         return response, contains_keyword, found_keyword
+
+    def get_new_ai_response(self, initial_count):
+        """Return the text of the newly appended AI response bubble.
+
+        Deterministic: retries reading the last bubble at index >= initial_count.
+        Does NOT fall back to the heuristic extractor on failure, because that
+        path is not parameterized by initial_count and could return a stale
+        prior bubble (the original bug this fix targets). On persistent failure
+        returns an empty string so the calling assertion fails with the actual
+        question text and diagnostic info.
+        """
+        import re
+        bubbles = self.page.locator('div[class*="bg-muted"]')
+        # Retry to absorb brief re-renders / hydration gaps.
+        for _ in range(5):
+            total = bubbles.count()
+            if total > initial_count:
+                try:
+                    text = bubbles.nth(total - 1).text_content() or ""
+                    cleaned = re.sub(r'\s+', ' ', text).strip()
+                    if cleaned:
+                        return cleaned
+                except PlaywightTimeoutError:
+                    pass
+                except Exception:
+                    pass
+            self.page.wait_for_timeout(1000)
+        return ""
     
     def get_latest_ai_response(self):
         """Get the text content of the LATEST/MOST RECENT AI response only"""
