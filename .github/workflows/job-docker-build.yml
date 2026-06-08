@@ -3,7 +3,7 @@ name: Docker Build Job
 on:
   push:
     branches:
-      - psl-vk-voicesearchfix
+      - psl-vk-imagefix
   workflow_call:
     inputs:
       trigger_type:
