@@ -84,13 +84,8 @@ const chatSlice = createSlice({
       })
       .addCase(fetchConversationMessages.fulfilled, (state, action) => {
         state.currentSessionId = action.payload.sessionId;
-        // Merge server messages with local optimistic messages instead of
-        // replacing. When a voice turn creates a session mid-flow this fetch
-        // can race the in-flight `save-voice-message` POSTs; a naive replace
-        // would wipe the optimistically-dispatched assistant message and the
-        // user would only see the answer after a manual refresh.
-        // Strategy: prefer the server copy by ID, then append any local
-        // messages whose IDs are not yet on the server, sorted by timestamp.
+        // Merge server + local optimistic messages so an in-flight save
+        // (e.g. voice assistant reply) isn't wiped by a racing fetch.
         const serverIds = new Set(
           action.payload.messages.map((m) => m.id).filter(Boolean),
         );

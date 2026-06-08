@@ -67,9 +67,7 @@ export const EnhancedChatPanel = ({
   const isSpeakingRef = useRef(false);
   const awaitingResponseRef = useRef(false);
   const responseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Aborts the voice session if the backend never sends `session_started` (e.g. when
-  // Azure Voice Live cold-start exceeds the connect timeout). Without this guard a
-  // failed cold-start would leave the mic icon spinning forever.
+  // Safety net for when `session_started` never arrives (cold-start timeout).
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks whether the current voice turn has already posted the structured tool
   // result to chat history (via the early `tool_result` event). When true, the
@@ -442,11 +440,8 @@ export const EnhancedChatPanel = ({
     setVoiceSessionState('connecting');
     setVoiceError(null);
 
-    // NOTE: Microphone capture is intentionally deferred until the backend sends
-    // `session_started` (see ws.onmessage below). On a cold start the Azure Voice
-    // Live connection can take several seconds to establish; starting the mic
-    // before then would drop the beginning of the user's first utterance because
-    // the small in-memory audio buffer overflows during the wait.
+    // Mic capture is deferred until `session_started` to avoid buffer overflow
+    // during Azure Voice Live cold-start.
 
     if (!isVoiceEnabled) {
       setVoiceError('Voice is unavailable. Configure Azure Voice Live endpoint and key.');
@@ -474,9 +469,7 @@ export const EnhancedChatPanel = ({
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    // Safety net: if `session_started` never arrives (e.g. Azure cold-start
-    // exceeds 30s or backend connect fails), surface an error instead of
-    // leaving the UI stuck on the connecting indicator.
+    // 30s safety net for cold-start: surface an error if never ready.
     if (connectTimeoutRef.current) {
       clearTimeout(connectTimeoutRef.current);
     }
@@ -686,9 +679,7 @@ export const EnhancedChatPanel = ({
         }
 
         if (message.type === 'session_started') {
-          // Backend is ready to accept audio — clear cold-start timeout and
-          // start the microphone now so the very first sample captured is
-          // delivered to Azure Voice Live (no buffer overflow window).
+          // Backend ready: clear cold-start timeout and start mic now.
           if (connectTimeoutRef.current) {
             clearTimeout(connectTimeoutRef.current);
             connectTimeoutRef.current = null;
