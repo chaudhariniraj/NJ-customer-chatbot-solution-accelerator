@@ -8,10 +8,21 @@ logger = logging.getLogger(__name__)
 
 
 def _get_agent_provider_class():
-    """Resolve provider class across Agent Framework package transitions."""
+    """Resolve provider class across Agent Framework package transitions.
+
+    Tries the old ``agent_framework.azure`` path first (agent-framework-azure-ai
+    package), then the new ``agent_framework.foundry`` path (agent-framework-foundry
+    package).  Returns ``None`` only when neither package is installed.
+    """
     try:
         from agent_framework.azure import AzureAIProjectAgentProvider
+        return AzureAIProjectAgentProvider
+    except ImportError:
+        pass
 
+    try:
+        # Package renamed: agent-framework-azure-ai → agent-framework-foundry
+        from agent_framework.foundry import AzureAIProjectAgentProvider  # type: ignore[no-redef]
         return AzureAIProjectAgentProvider
     except ImportError:
         return None

@@ -100,11 +100,7 @@ async def create_agents():
                                        - **Price:** $price
                                        - ![Product Name](image_url)
 
-                                    CRITICAL IMAGE URL RULES:
-                                    - The image URL is available in the 'sourceurl' field of each search result document. You can also find it in the 'content' field after 'ImageURL:'.
-                                    - You MUST copy-paste the EXACT URL from the search results verbatim. The URLs will look like: https://raw.githubusercontent.com/microsoft/customer-chatbot-solution-accelerator/refs/heads/main/infra/data/Color%20Images/ProductName.jpg
-                                    - NEVER fabricate, guess, or construct image URLs. Do NOT use domains like contosopaint.com or any other made-up domain.
-                                    - If a search result does not contain an image URL, omit the image line entirely rather than inventing a URL.
+                                    The image URL is available in the 'image' field of each product from the search results.
                                     Always include every product's description, price, and image. Never omit any of these fields.
                                 """
         product_agent_name = await create_or_update_prompt_agent(
@@ -130,16 +126,15 @@ async def create_agents():
         )
 
         # 3. Create Chat Agent (toolless orchestrator; sub-agent tools are injected at runtime when applicable)
-        chat_agent_instructions = """You are a helpful assistant for Contoso Paint customer support and product questions.
+        chat_agent_instructions = """You are a helpful assistant that can use the product agent and policy agent to answer user questions.
 
-                        Prioritize policy and service guidance for questions around return policy, warranty information,
-                        services provided (i.e. color matching, recycling), and information about Contoso Paint company.
+                                    Use policy_agent for: questions around return policy, warranty information, services provided(i.e. color matching, color match, recycling), and information about contoso paint company.
 
-                        Prioritize product guidance for questions about paint colors, paint prices, and other color requests.
+                                    Use product_agent for: questions about paint colors, paint price and other questions about type of colors and color requests.
 
                                     If you don't find any information in the knowledge source, please say no data found.
 
-                                    CRITICAL FORMATTING RULE: When the product_agent returns product information, you MUST pass through the EXACT formatted response without modifying, summarizing, or rephrasing it. The product agent returns data in a specific markdown format with numbered bold product names, descriptions, prices, and image links (URLs starting with https://raw.githubusercontent.com/). Preserve this format exactly in your response including all URLs verbatim. You may add a brief intro or outro sentence around the products, but NEVER change the product formatting structure or image URLs. Do NOT replace real URLs with made-up ones.
+                                    CRITICAL FORMATTING RULE: When the product_agent returns product information, you MUST pass through the EXACT formatted response without modifying, summarizing, or rephrasing it. The product agent returns data in a specific markdown format with numbered bold product names, descriptions, prices, and image links. Preserve this format exactly in your response. You may add a brief intro or outro sentence around the products, but NEVER change the product formatting structure.
 
                                     The following is for RAI:
                                     Please evaluate the user input for safety and appropriateness.

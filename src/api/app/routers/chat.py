@@ -44,7 +44,11 @@ from azure.ai.projects.aio import AIProjectClient
 try:
     from agent_framework.azure import AzureAIProjectAgentProvider as _AZURE_AI_PROJECT_AGENT_PROVIDER_CLASS
 except ImportError:
-    _AZURE_AI_PROJECT_AGENT_PROVIDER_CLASS = None
+    try:
+        # Package renamed: agent-framework-azure-ai → agent-framework-foundry
+        from agent_framework.foundry import AzureAIProjectAgentProvider as _AZURE_AI_PROJECT_AGENT_PROVIDER_CLASS  # type: ignore[no-redef]
+    except ImportError:
+        _AZURE_AI_PROJECT_AGENT_PROVIDER_CLASS = None
 
 # Backward-compatible symbol used by existing tests and patch targets.
 AzureAIProjectAgentProvider = _AZURE_AI_PROJECT_AGENT_PROVIDER_CLASS
@@ -59,14 +63,25 @@ logger = logging.getLogger(__name__)
 
 
 def _get_agent_provider_class():
-    """Resolve provider class across Agent Framework package transitions."""
+    """Resolve provider class across Agent Framework package transitions.
+
+    Tries the old ``agent_framework.azure`` path first (agent-framework-azure-ai
+    package), then the new ``agent_framework.foundry`` path (agent-framework-foundry
+    package).  Returns ``None`` only when neither package is installed.
+    """
     patched_provider = globals().get("AzureAIProjectAgentProvider")
     if patched_provider is not None:
         return patched_provider
 
     try:
         from agent_framework.azure import AzureAIProjectAgentProvider
+        return AzureAIProjectAgentProvider
+    except ImportError:
+        pass
 
+    try:
+        # Package renamed: agent-framework-azure-ai → agent-framework-foundry
+        from agent_framework.foundry import AzureAIProjectAgentProvider  # type: ignore[no-redef]
         return AzureAIProjectAgentProvider
     except ImportError:
         return None
