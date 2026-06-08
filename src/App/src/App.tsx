@@ -89,6 +89,12 @@ function App() {
 
   useEffect(() => {
     if (isAuthenticated && currentSessionId) {
+      // Skip fetch when voice flow just created this session — the messages
+      // are being managed locally and a premature fetch would overwrite them.
+      if (voiceCreatedSessionRef.current) {
+        voiceCreatedSessionRef.current = false;
+        return;
+      }
       fetchMessages(currentSessionId).catch(() => {
         toast.error('Failed to load chat history');
       });
@@ -200,6 +206,11 @@ function App() {
   // WebSocket handler race and the assistant save can reach the server first,
   // causing wrong message order in the DB and in the UI after a refetch.
   const voiceMessageQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // When the voice path creates a new session, we must suppress the useEffect
+  // that auto-fetches messages on currentSessionId change. Otherwise the fetch
+  // overwrites locally-added messages (user + assistant) before the assistant
+  // response has been saved to the server, causing the first response to vanish.
+  const voiceCreatedSessionRef = useRef(false);
 
   const handleVoiceMessage = useCallback((text: string, role: 'user' | 'assistant') => {
     voiceMessageQueueRef.current = voiceMessageQueueRef.current
@@ -216,6 +227,7 @@ function App() {
             const sessionData = await createNewChatSession();
             sessionId = sessionData.session_id;
             saveCurrentSessionId(sessionId);
+            voiceCreatedSessionRef.current = true;
             dispatch(setCurrentSessionId(sessionId));
           } catch {
             toast.error('Failed to start chat session');
