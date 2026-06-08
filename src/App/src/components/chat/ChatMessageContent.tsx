@@ -5,6 +5,8 @@ import { detectContentType, parseOrdersFromText, parseProductsFromText } from '@
 import { ChatMessage, Product } from '@/lib/types';
 import { parseChartContent } from '@/lib/utils/chartUtils';
 import { memo, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatMessageContentProps {
   message: ChatMessage;
@@ -91,7 +93,9 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
   if (hasProductRecommendations && onAddToCart) {
     return (
       <div className="space-y-2">
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        <div className="whitespace-pre-wrap [&_img]:max-w-full [&_img]:rounded-md [&_img]:my-2 [&_a]:text-primary [&_a]:underline">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+        </div>
         <div className="space-y-2 mt-2">
           {message.recommendedProducts!.map((product) => (
             <ProductRecommendation key={product.id} product={product} onAddToCart={onAddToCart} compact />
@@ -101,7 +105,11 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
     );
   }
 
-  return <p className="whitespace-pre-wrap">{message.content}</p>;
+  return (
+    <div className="whitespace-pre-wrap [&_img]:max-w-full [&_img]:rounded-md [&_img]:my-2 [&_a]:text-primary [&_a]:underline">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+    </div>
+  );
 });
 AssistantMessage.displayName = 'AssistantMessage';
 
