@@ -190,7 +190,7 @@ function normalizeOrderData(order: Partial<Order>): Order {
 export function parseProductsFromText(text: string): { products: Product[], introText: string, outroText: string } {
   const products: Product[] = [];
   
-  const parts = text.split(/(?=\d+\.\s*\*\*[^*]+\*\*)/);
+  const parts = text.split(/(?=\d+\.\s*\*\*[^*]+\*\*)|(?=\*\*\d+\.\s*[^*]+\*\*)/);
   
   let introText = '';
   let outroText = '';
@@ -206,7 +206,7 @@ export function parseProductsFromText(text: string): { products: Product[], intr
       const afterMatch = afterLastProduct.match(/!\[[^\]]*\]\([^)]*\)\.?\s*([\s\S]*?)$/);
       if (afterMatch && afterMatch[1].trim()) {
         const afterText = afterMatch[1].trim();
-        if (!afterText.match(/^\d+\.\s*\*\*/)) {
+        if (!afterText.match(/^\d+\.\s*\*\*/) && !afterText.match(/^\*\*\d+\.\s*/)) {
           outroText = afterText;
         }
       }
@@ -236,7 +236,7 @@ export function parseProductsFromText(text: string): { products: Product[], intr
 
 function parseProductSection(section: string): Product | null {
   try {
-    let nameMatch = section.match(/\d+\.\s*\*\*([^*]+)\*\*/);
+    let nameMatch = section.match(/\d+\.\s*\*\*([^*]+)\*\*/) || section.match(/\*\*\d+\.\s*([^*]+)\*\*/);
     let title = '';
     
     if (nameMatch) {
@@ -246,7 +246,7 @@ function parseProductSection(section: string): Product | null {
       if (imageAltMatch && imageAltMatch[1]) {
         title = imageAltMatch[1].trim();
       } else {
-        const quotedNameMatch = section.match(/"([^"]+)"|\*\*([^*]+)\*\*/);
+        const quotedNameMatch = section.match(/^"([^"]+)"|^\*\*([^*]+)\*\*/);
         if (quotedNameMatch) {
           title = (quotedNameMatch[1] || quotedNameMatch[2] || '').trim();
         }
@@ -254,22 +254,17 @@ function parseProductSection(section: string): Product | null {
     }
     
     if (!title) {
-      const quotedBeforeDescribed = section.match(/"([^"]+)"\s+is\s+(?:described\s+as|a\s+)/i);
+      const quotedBeforeDescribed = section.match(/^"([^"]+)"\s+is\s+(?:described\s+as|a\s+)/i);
       if (quotedBeforeDescribed) {
         title = quotedBeforeDescribed[1].trim();
       } else {
-        const firstLineMatch = section.match(/([A-Z][a-zA-Z\s]+?)\s+is\s+(?:described\s+as|a\s+)/i);
+        const firstLineMatch = section.match(/^([A-Z][a-zA-Z\s]+?)\s+is\s+(?:described\s+as|a\s+)/i);
         if (firstLineMatch) {
           title = firstLineMatch[1].trim();
         } else {
           const linkContextMatch = section.match(/(?:image|view|see|shade)\s+of\s+([A-Z][a-zA-Z\s]+?)\s+\[/i);
           if (linkContextMatch) {
             title = linkContextMatch[1].trim();
-          } else {
-            const imageLabelMatch = section.match(/(?:^|\n)\s*Image:\s*\[([^\]]+)\]/im);
-            if (imageLabelMatch) {
-              title = imageLabelMatch[1].trim();
-            }
           }
         }
       }
@@ -277,10 +272,7 @@ function parseProductSection(section: string): Product | null {
     
     if (!title) return null;
     
-    const priceMatch =
-      section.match(/\*\*Price:\*\*\s*\$([0-9,]+\.?\d*)/) ||
-      section.match(/[-–]\s*Price:\s*\$([0-9,]+\.?\d*)/) ||
-      section.match(/(?:^|\n)\s*Price:\s*\$([0-9,]+\.?\d*)/im);
+    const priceMatch = section.match(/\*\*Price:\*\*\s*\$([0-9,]+\.?\d*)/) || section.match(/[-–]\s*Price:\s*\$([0-9,]+\.?\d*)/) || section.match(/Price:\s*\$([0-9,]+\.?\d*)/);
     const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : 59.50;
     
     const originalPriceMatch = section.match(/Originally \$([0-9,]+\.?\d*)/);
@@ -294,15 +286,13 @@ function parseProductSection(section: string): Product | null {
     
     let description = '';
     
-    const descMatch =
-      section.match(/\*\*Description:\*\*\s*([^\n]+)/) ||
-      section.match(/(?:^|\n)\s*Description:\s*([^\n]+)/im);
+    const descMatch = section.match(/\*\*Description:\*\*\s*([^\n]+)/);
     if (descMatch) {
       description = descMatch[1].trim();
     }
     
     if (!description) {
-      const flatDescMatch = section.match(/[-–]\s*Description:\s*(.+?)(?=\s*[-–]\s*Price:|\s*[-–]\s*!\[|$)/i);
+      const flatDescMatch = section.match(/[-–]\s*Description:\s*(.+?)(?=\s*[-–]\s*Price:|\s*[-–]\s*!\[|$)/i) || section.match(/Description:\s*(.+?)(?=\s*Price:|\s*Image:|\s*!\[|$)/i);
       if (flatDescMatch) {
         description = flatDescMatch[1].trim();
       }
@@ -356,10 +346,7 @@ function parseProductSection(section: string): Product | null {
     const inStock = stockMatch ? stockMatch[1] === 'Yes' : true;
     
     let image = '';
-    const imageMatch =
-      section.match(/!\[.*?\]\(([^)]+)\)/) ||
-      section.match(/(?:^|\n)\s*Image:\s*\[[^\]]+\]\(([^)]+)\)/im) ||
-      section.match(/(?:^|\n)\s*Image:\s*(https?:\/\/\S+)/im);
+    const imageMatch = section.match(/!\[.*?\]\(([^)]+)\)/);
     if (imageMatch) {
       image = imageMatch[1];
     } else {
@@ -398,28 +385,20 @@ export function detectContentType(text: string): 'orders' | 'products' | 'text' 
     return 'orders';
   }
   
-  const hasProductFormat = /\d+\.\s*\*\*[^*]+\*\*.*!\[/s.test(text);
-  const hasPriceAndRating = (text.includes('**Price:**') || /[-–]\s*Price:\s*\$/i.test(text)) && 
+  const hasProductFormat = /\d+\.\s*\*\*[^*]+\*\*.*!\[/s.test(text) || /\*\*\d+\.\s*[^*]+\*\*.*!\[/s.test(text);
+  const hasPriceAndRating = (text.includes('**Price:**') || /[-–]\s*Price:\s*\$/i.test(text) || /\nPrice:\s*\$/i.test(text)) && 
     (text.includes('**Rating:**') || /[-–]\s*Rating:/i.test(text));
-  const hasPriceAndDescription = (text.includes('**Price:**') || /[-–]\s*Price:\s*\$/i.test(text)) &&
-    (text.includes('**Description:**') || /[-–]\s*Description:/i.test(text));
-  const hasPlainProductFields = /(?:^|\n)\s*(?:Description|Price|Image):/im.test(text);
+  const hasPriceAndDescription = (text.includes('**Price:**') || /[-–]\s*Price:\s*\$/i.test(text) || /\nPrice:\s*\$/i.test(text)) &&
+    (text.includes('**Description:**') || /[-–]\s*Description:/i.test(text) || /\nDescription:/i.test(text));
   
   const hasImageOrLink = /!\[[^\]]+\]\([^)]+\)/.test(text) || /\[[^\]]+\]\([^)]+\.(jpg|jpeg|png|gif|webp|svg)/i.test(text);
   const hasImageWithDescription = hasImageOrLink && 
     (/\w+\s+is\s+(?:described\s+as|a\s+)/i.test(text) || 
      /"[^"]+"\s+is\s+(?:described\s+as|a\s+)/i.test(text));
-  const hasPlainProductShape =
-    hasPlainProductFields &&
-    (/"[^"]+"/.test(text) || /(?:^|\n)\s*Price:\s*\$/im.test(text) || hasImageOrLink);
+
+  const hasNumberedProductsWithPrice = /\*\*\d+\.\s*[^*]+\*\*/s.test(text) && /Price:\s*\$/i.test(text) && hasImageOrLink;
   
-  if (
-    hasPriceAndRating ||
-    hasPriceAndDescription ||
-    hasProductFormat ||
-    hasImageWithDescription ||
-    hasPlainProductShape
-  ) {
+  if (hasPriceAndRating || hasPriceAndDescription || hasProductFormat || hasImageWithDescription || hasNumberedProductsWithPrice) {
     return 'products';
   }
   
