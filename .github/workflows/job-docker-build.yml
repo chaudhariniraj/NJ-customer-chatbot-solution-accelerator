@@ -1,6 +1,9 @@
 name: Docker Build Job
 
 on:
+  push:
+    branches:
+      - psl-vk-voicesearchfix
   workflow_call:
     inputs:
       trigger_type:
@@ -22,7 +25,7 @@ env:
 
 jobs:
   docker-build:
-    if: inputs.trigger_type == 'workflow_dispatch' && inputs.build_docker_image == true
+    if: github.event_name == 'push' || (github.event_name == 'workflow_call' && inputs.trigger_type == 'workflow_dispatch' && inputs.build_docker_image == true)
     runs-on: ubuntu-latest
     environment: production
     outputs:
