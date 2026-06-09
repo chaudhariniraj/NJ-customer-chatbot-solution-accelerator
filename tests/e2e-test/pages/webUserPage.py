@@ -32,7 +32,16 @@ class WebUserPage(BasePage):
             timeout=10000
         )
         send_button.click()
-        self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=30000)
+        # Wait for stop generating to APPEAR first (confirms request was sent)
+        try:
+            self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="visible", timeout=10000)
+        except Exception:
+            pass  # May not appear for very fast responses
+        # Then wait for it to disappear (response complete)
+        try:
+            self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=60000)
+        except Exception:
+            pass
 
     def open_chat_window(self):
         """Click on the Open Chat button to open the chat window"""
@@ -44,14 +53,19 @@ class WebUserPage(BasePage):
 
     def wait_for_response(self, timeout=30000):
         """Wait for the chat response to appear"""
+        # Wait for stop generating button to appear (confirms processing started)
+        try:
+            self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="visible", timeout=10000)
+        except Exception:
+            pass  # May not appear for very fast responses
+        
         # Wait for stop generating button to disappear (indicating response is complete)
         try:
             self.page.locator(self.STOP_GENERATING_LABEL).wait_for(state="hidden", timeout=timeout)
         except Exception:
-            # If stop generating button doesn't appear, just wait a bit
             pass
         
-        # Additional wait to ensure response is fully loaded
+        # Additional wait to ensure response is fully rendered
         self.page.wait_for_timeout(5000)
 
     def get_last_response(self):
@@ -217,11 +231,17 @@ class WebUserPage(BasePage):
         self.wait_for_response(timeout=45000)
         
         # Wait for a NEW response to appear (response count should increase)
+        # AND ensure the new response has meaningful content (not just UI metadata)
         try:
             self.page.wait_for_function(
                 f"""(expectedCount) => {{
                     const responses = document.querySelectorAll('div[class*="bg-muted"]');
-                    return responses.length > expectedCount;
+                    if (responses.length <= expectedCount) return false;
+                    // Verify the latest response has meaningful text content
+                    const latest = responses[responses.length - 1];
+                    const text = latest.textContent || '';
+                    // Must have substantial text that isn't just UI chrome
+                    return text.length > 50 && !text.trim().startsWith('YouAI');
                 }}""",
                 arg=initial_response_count,
                 timeout=60000
@@ -270,6 +290,14 @@ class WebUserPage(BasePage):
                     
                     if response_text and len(response_text.strip()) > 20:
                         cleaned = re.sub(r'\s+', ' ', response_text).strip()
+                        # Skip UI metadata that isn't actual AI response content
+                        ui_only_patterns = [
+                            'YouAIAI-generated content may be incorrect',
+                            'AI-generated content may be incorrect',
+                        ]
+                        is_ui_only = any(cleaned.strip() == p or cleaned.strip().startswith(p) and len(cleaned.strip()) < len(p) + 10 for p in ui_only_patterns)
+                        if is_ui_only:
+                            continue
                         # Validate this looks like an AI text response, not a product card
                         if not self._is_product_card_text(cleaned):
                             return cleaned
