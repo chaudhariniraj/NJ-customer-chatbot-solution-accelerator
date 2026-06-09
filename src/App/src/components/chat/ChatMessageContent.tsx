@@ -5,6 +5,8 @@ import { detectContentType, parseOrdersFromText, parseProductsFromText } from '@
 import { ChatMessage, Product } from '@/lib/types';
 import { parseChartContent } from '@/lib/utils/chartUtils';
 import { memo, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatMessageContentProps {
   message: ChatMessage;
@@ -46,6 +48,13 @@ const ChartMessage = memo(({ content }: { content: string }) => {
 });
 ChartMessage.displayName = 'ChartMessage';
 
+const MarkdownContent = memo(({ content }: { content: string }) => (
+  <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2">
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+  </div>
+));
+MarkdownContent.displayName = 'MarkdownContent';
+
 const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage; onAddToCart?: (product: Product) => void }) => {
   const contentType = useMemo(() => detectContentType(message.content), [message.content]);
   const parsedOrdersData = useMemo(
@@ -66,7 +75,7 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
   if (parsedOrdersData.orders.length > 0) {
     return (
       <div className="space-y-3">
-        {parsedOrdersData.introText && <p className="whitespace-pre-wrap">{parsedOrdersData.introText}</p>}
+        {parsedOrdersData.introText && <MarkdownContent content={parsedOrdersData.introText} />}
         {parsedOrdersData.orders.map((order) => (
           <ChatOrderCard key={order.orderNumber} order={order} />
         ))}
@@ -77,12 +86,14 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
   if (parsedProductsData.products.length > 0) {
     return (
       <div className="space-y-3">
-        {parsedProductsData.introText && <p className="whitespace-pre-wrap">{parsedProductsData.introText}</p>}
+        {parsedProductsData.introText && <MarkdownContent content={parsedProductsData.introText} />}
         {parsedProductsData.products.map((product) => (
           <ChatProductCard key={product.id} product={product} onAddToCart={onAddToCart} />
         ))}
         {parsedProductsData.outroText && (
-          <p className="whitespace-pre-wrap mt-2">{parsedProductsData.outroText}</p>
+          <div className="mt-2">
+            <MarkdownContent content={parsedProductsData.outroText} />
+          </div>
         )}
       </div>
     );
@@ -91,7 +102,7 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
   if (hasProductRecommendations && onAddToCart) {
     return (
       <div className="space-y-2">
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        <MarkdownContent content={message.content} />
         <div className="space-y-2 mt-2">
           {message.recommendedProducts!.map((product) => (
             <ProductRecommendation key={product.id} product={product} onAddToCart={onAddToCart} compact />
@@ -101,7 +112,7 @@ const AssistantMessage = memo(({ message, onAddToCart }: { message: ChatMessage;
     );
   }
 
-  return <p className="whitespace-pre-wrap">{message.content}</p>;
+  return <MarkdownContent content={message.content} />;
 });
 AssistantMessage.displayName = 'AssistantMessage';
 
