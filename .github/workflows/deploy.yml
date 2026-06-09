@@ -176,15 +176,84 @@ jobs:
           echo "API_URL=$API_URL" >> $GITHUB_OUTPUT
           echo "Deployment output: $BICEP_OUTPUT"
 
+      - name: Tag Resource Group with Deployment Name
+        run: |
+          az group update --name "${{ env.RESOURCE_GROUP_NAME }}" \
+            --set tags.DeploymentName="${{ env.SOLUTION_PREFIX }}-deployment" \
+            --output none
+
+      - name: Setup Python for Post-Deployment Scripts
+        run: |
+          python3 --version
+          # Ensure 'python' command is available (scripts use 'python' not 'python3')
+          if ! command -v python &> /dev/null; then
+            sudo ln -sf $(which python3) /usr/local/bin/python
+          fi
+
+      - name: Run Data Upload Scripts
+        env:
+          SKIP_NETWORK_TOGGLE: "true"
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          echo "📊 Running data upload scripts to populate product catalogs and create search indexes..."
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Attempt $attempt of $MAX_RETRIES..."
+            bash ./infra/scripts/data_scripts/run_upload_data_scripts.sh --resource-group "${{ env.RESOURCE_GROUP_NAME }}" && break
+            if [[ $attempt -eq $MAX_RETRIES ]]; then
+              echo "❌ Data upload failed after $MAX_RETRIES attempts"
+              exit 1
+            fi
+            echo "⚠️ Attempt $attempt failed. Retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
+          echo "✅ Data upload completed successfully"
+
+      - name: Run Agent Creation Scripts
+        env:
+          SKIP_NETWORK_TOGGLE: "true"
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          echo "🤖 Running agent creation scripts to set up Azure AI Foundry agents..."
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Attempt $attempt of $MAX_RETRIES..."
+            bash ./infra/scripts/agent_scripts/run_create_agents_scripts.sh --resource-group "${{ env.RESOURCE_GROUP_NAME }}" && break
+            if [[ $attempt -eq $MAX_RETRIES ]]; then
+              echo "❌ Agent creation failed after $MAX_RETRIES attempts"
+              exit 1
+            fi
+            echo "⚠️ Attempt $attempt failed. Retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
+          echo "✅ Agent creation completed successfully"
+
+      - name: Wait for Data Propagation and App Readiness
+        run: |
+          echo "⏳ Waiting 5 minutes for data to propagate and indexes to update..."
+          sleep 300
+          echo "✅ Wait completed, data should now be available"
+
       - name: Logout from Azure
         if: always()
         run: |
           az logout
           echo "Logged out from Azure."
 
+  e2e-test:
+    if: needs.deploy.outputs.WEBAPP_URL != ''
+    needs: [deploy]
+    uses: ./.github/workflows/test-automation-v2.yml
+    with:
+      TEST_URL: ${{ needs.deploy.outputs.WEBAPP_URL }}
+      TEST_SUITE: "GoldenPath-Testing"
+    secrets: inherit
+
   cleanup-deployment:
     if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != ''
-    needs: [deploy]
+    needs: [deploy, e2e-test]
     runs-on: ubuntu-latest
     environment: production
     env:
