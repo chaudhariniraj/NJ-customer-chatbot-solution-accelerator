@@ -231,6 +231,14 @@ export function parseProductsFromText(text: string): { products: Product[], intr
     }
   }
   
+  // Fallback: parse simple product format (product name + description + price without markdown structure)
+  if (products.length === 0) {
+    const simpleResult = parseSimpleProductFormat(text);
+    if (simpleResult.products.length > 0) {
+      return simpleResult;
+    }
+  }
+  
   return { products, introText, outroText };
 }
 
@@ -359,6 +367,12 @@ function parseProductSection(section: string): Product | null {
       }
     }
     
+    // Fallback: construct image URL from product title if no image found in text
+    if (!image && title) {
+      const imageFileName = title.replace(/\s+/g, '');
+      image = `https://raw.githubusercontent.com/microsoft/customer-chatbot-solution-accelerator/refs/heads/main/infra/data/Color%20Images/${imageFileName}.jpg`;
+    }
+    
     return {
       id: `product-${title.toLowerCase().replace(/\s+/g, '-')}`,
       title,
@@ -374,6 +388,100 @@ function parseProductSection(section: string): Product | null {
   } catch {
     return null;
   }
+}
+
+const KNOWN_PRODUCT_NAMES = [
+  'Snow Veil', 'Porcelain Mist', 'Stone Dusk', 'Fog Harbor', 'Graphite Fade',
+  'Obsidian Pearl', 'Steel Sky', 'Blue Ash', 'Cloud Drift', 'Silver Shore',
+  'Seafoam Light', 'Quiet Moss', 'Olive Stone', 'Verdant Haze', 'Glacier Tint', 'Pine Shadow'
+];
+
+function parseSimpleProductFormat(text: string): { products: Product[], introText: string, outroText: string } {
+  const products: Product[] = [];
+  let introText = '';
+  let outroText = '';
+
+  // Find positions of all known product names in the text
+  const productPositions: Array<{ name: string; index: number }> = [];
+  for (const name of KNOWN_PRODUCT_NAMES) {
+    let searchFrom = 0;
+    while (true) {
+      const idx = text.indexOf(name, searchFrom);
+      if (idx === -1) break;
+      productPositions.push({ name, index: idx });
+      searchFrom = idx + name.length;
+    }
+  }
+
+  if (productPositions.length === 0) {
+    return { products: [], introText: text, outroText: '' };
+  }
+
+  // Sort by position
+  productPositions.sort((a, b) => a.index - b.index);
+
+  // Extract intro text (everything before the first product)
+  introText = text.substring(0, productPositions[0].index).trim();
+
+  // Extract each product section
+  for (let i = 0; i < productPositions.length; i++) {
+    const start = productPositions[i].index;
+    const end = i + 1 < productPositions.length ? productPositions[i + 1].index : text.length;
+    const section = text.substring(start, end);
+    const title = productPositions[i].name;
+
+    // Extract price from section
+    const priceMatch = section.match(/\$([0-9,]+\.?\d*)\s*USD/i);
+    const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : 59.50;
+
+    // Extract description: text between title and price (or end)
+    let description = '';
+    const afterTitle = section.substring(title.length).trim();
+    if (priceMatch) {
+      const priceIdx = afterTitle.indexOf(priceMatch[0]);
+      if (priceIdx > 0) {
+        description = afterTitle.substring(0, priceIdx).trim();
+      }
+    } else {
+      description = afterTitle.trim();
+    }
+    // Clean up description: remove leading punctuation/dashes
+    description = description.replace(/^[-–:.\s]+/, '').trim();
+
+    // Construct image URL from title
+    const imageFileName = title.replace(/\s+/g, '');
+    const image = `https://raw.githubusercontent.com/microsoft/customer-chatbot-solution-accelerator/refs/heads/main/infra/data/Color%20Images/${imageFileName}.jpg`;
+
+    products.push({
+      id: `product-${title.toLowerCase().replace(/\s+/g, '-')}`,
+      title,
+      price,
+      originalPrice: undefined,
+      rating: 4.5,
+      reviewCount: 0,
+      image,
+      category: 'Paint Shades',
+      inStock: true,
+      description
+    });
+  }
+
+  // Extract outro text (text after last product's price)
+  if (productPositions.length > 0) {
+    const lastStart = productPositions[productPositions.length - 1].index;
+    const lastSection = text.substring(lastStart);
+    const lastPriceMatch = lastSection.match(/\$[0-9,]+\.?\d*\s*USD/i);
+    if (lastPriceMatch) {
+      const afterLastPrice = lastSection.substring(
+        lastSection.indexOf(lastPriceMatch[0]) + lastPriceMatch[0].length
+      ).trim();
+      if (afterLastPrice && !KNOWN_PRODUCT_NAMES.some(name => afterLastPrice.startsWith(name))) {
+        outroText = afterLastPrice;
+      }
+    }
+  }
+
+  return { products, introText, outroText };
 }
 
 export function detectContentType(text: string): 'orders' | 'products' | 'text' {
@@ -396,7 +504,12 @@ export function detectContentType(text: string): 'orders' | 'products' | 'text' 
     (/\w+\s+is\s+(?:described\s+as|a\s+)/i.test(text) || 
      /"[^"]+"\s+is\s+(?:described\s+as|a\s+)/i.test(text));
   
-  if (hasPriceAndRating || hasPriceAndDescription || hasProductFormat || hasImageWithDescription) {
+  // Detect simple product format: known product names + price pattern (e.g. "$59.50 USD")
+  const hasKnownProducts = KNOWN_PRODUCT_NAMES.filter(name => text.includes(name)).length >= 1;
+  const hasPricePattern = /\$\d+\.?\d*\s*USD/i.test(text);
+  const hasSimpleProductFormat = hasKnownProducts && hasPricePattern;
+  
+  if (hasPriceAndRating || hasPriceAndDescription || hasProductFormat || hasImageWithDescription || hasSimpleProductFormat) {
     return 'products';
   }
   

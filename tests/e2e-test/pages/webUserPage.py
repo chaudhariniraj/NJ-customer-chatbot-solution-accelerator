@@ -51,33 +51,8 @@ class WebUserPage(BasePage):
             # If stop generating button doesn't appear, just wait a bit
             pass
         
-        # Wait for AI response to appear by looking for response indicators
-        # Wait for new content to appear that indicates an AI response
-        try:
-            # Wait for either the "AI-generated content may be incorrect" footer to appear
-            # or wait for any meaningful response content
-            self.page.wait_for_function("""
-                () => {
-                    const pageText = document.body.innerText;
-                    const aiIndicators = [
-                        'AI-generated content may be incorrect',
-                        'Yes, we offer',
-                        'warranty',
-                        'Contoso',
-                        '2-year',
-                        'return'
-                    ];
-                    return aiIndicators.some(indicator => 
-                        pageText.includes(indicator) && 
-                        pageText.split(indicator).length > pageText.split('Do you provide a color matching service?').length
-                    );
-                }
-            """, timeout=timeout)
-        except Exception:
-            pass  # Timeout waiting for AI response is expected in some test scenarios
-        
         # Additional wait to ensure response is fully loaded
-        self.page.wait_for_timeout(3000)
+        self.page.wait_for_timeout(5000)
 
     def get_last_response(self):
         """Get the text content of the last chat response"""
@@ -89,7 +64,7 @@ class WebUserPage(BasePage):
         
         # Method 1: Split by timestamps to isolate individual messages
         import re
-        timestamp_pattern = r'Jan \d+, \d+:\d+ PM'
+        timestamp_pattern = r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+, \d+:\d+ [AP]M'
         
         # Split by timestamps to get message blocks
         message_blocks = re.split(timestamp_pattern, full_page_text)
@@ -150,11 +125,16 @@ class WebUserPage(BasePage):
                 extended_response = full_page_text[last_match.start():last_match.end() + 300]
                 
                 # Clean up the extended response
-                end_markers = ['Jan ', 'YouAI', 'AI-generated', 'Products']
+                end_markers = ['YouAI', 'AI-generated', 'Products']
                 for marker in end_markers:
                     marker_pos = extended_response.find(marker, 100)  # Look for markers after first 100 chars
                     if marker_pos > 0:
                         extended_response = extended_response[:marker_pos]
+                
+                # Also trim at timestamp boundaries
+                ts_match = re.search(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+, \d+:\d+ [AP]M', extended_response[100:])
+                if ts_match:
+                    extended_response = extended_response[:100 + ts_match.start()]
                 
                 cleaned_response = re.sub(r'\s+', ' ', extended_response).strip()
                 if len(cleaned_response) > 20:
@@ -181,11 +161,16 @@ class WebUserPage(BasePage):
                     response_part = full_page_text[start_idx:start_idx + 600]
                     
                     # Clean up
-                    end_markers = ['Jan ', 'PM', 'AI-generated content', 'You', '\n\n']
+                    end_markers = ['AI-generated content', 'You', '\n\n']
                     for marker in end_markers:
                         marker_pos = response_part.find(marker, 50)
                         if marker_pos > 0:
                             response_part = response_part[:marker_pos]
+                    
+                    # Trim at timestamp boundaries
+                    ts_match = re.search(r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+, \d+:\d+ [AP]M', response_part[50:])
+                    if ts_match:
+                        response_part = response_part[:50 + ts_match.start()]
                     
                     best_match = response_part.strip()
         
@@ -294,8 +279,8 @@ class WebUserPage(BasePage):
         # Method 2: Parse the full page and extract the latest AI response by timestamp
         full_page_text = self.page.locator('body').text_content()
         
-        # Split by timestamps (e.g., "Jan 30, 10:49 AM")
-        timestamp_pattern = r'(Jan \d+, \d+:\d+ [AP]M)'
+        # Split by timestamps (e.g., "Jun 8, 11:15 AM")
+        timestamp_pattern = r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+, \d+:\d+ [AP]M)'
         parts = re.split(timestamp_pattern, full_page_text)
         
         # Find the last AI response (typically follows a timestamp and doesn't contain "You")
