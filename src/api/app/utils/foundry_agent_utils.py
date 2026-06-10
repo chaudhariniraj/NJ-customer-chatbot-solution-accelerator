@@ -3,12 +3,26 @@ Foundry agent utilities — call the multi-agent pipeline for grounded enterpris
 """
 import json
 import logging
+import re
 from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Sub-agent tools baked into the chat agent definition.
 _SUBAGENT_TOOL_NAMES = {"product_agent", "policy_agent"}
+
+# Azure AI Search citation annotations, e.g. "【4:0†source】".
+_CITATION_RE = re.compile(r"\u3010[^\u3011]*?\u2020[^\u3011]*?\u3011")
+
+
+def _strip_citations(text: str) -> str:
+    """Remove Azure AI Search citation markers and tidy leftover spacing."""
+    if not text:
+        return text
+    cleaned = _CITATION_RE.sub("", text)
+    cleaned = re.sub(r"[ \t]+([.,;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip()
 
 
 def _get_agent_provider_class():
@@ -26,9 +40,9 @@ def _result_text(result: Any) -> str:
     if result is None:
         return ""
     text = getattr(result, "text", None)
-    if text:
-        return text
-    return str(result)
+    if not text:
+        text = str(result)
+    return _strip_citations(text)
 
 
 def _extract_subagent_call(result: Any) -> Optional[Tuple[str, str]]:
