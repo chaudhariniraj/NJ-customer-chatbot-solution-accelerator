@@ -11,6 +11,7 @@ class WebUserPage(BasePage):
     STOP_GENERATING_LABEL = "[aria-label='Stop generating']"
     CHAT_RESPONSE = "[data-testid='chat-response'], .chat-response, [role='article']"
     CHAT_MESSAGE = ".chat-message, [data-testid='chat-message']"
+    ASSISTANT_MESSAGE_BUBBLE = "[data-radix-scroll-area-viewport] div.rounded-2xl.bg-muted.border"
 
     def __init__(self, page):
         super().__init__(page)
@@ -219,7 +220,7 @@ class WebUserPage(BasePage):
     def ask_question_and_verify(self, question, expected_keywords):
         """Ask a question and verify the response contains expected content"""
         # Count existing AI response containers BEFORE asking the question
-        ai_response_selector = 'div[class*="bg-muted"]'
+        ai_response_selector = self.ASSISTANT_MESSAGE_BUBBLE
         initial_response_count = self.page.locator(ai_response_selector).count()
         
         # Clear any existing input first
@@ -246,7 +247,7 @@ class WebUserPage(BasePage):
         try:
             self.page.wait_for_function(
                 f"""(expectedCount) => {{
-                    const responses = document.querySelectorAll('div[class*="bg-muted"]');
+                    const responses = document.querySelectorAll('{ai_response_selector}');
                     return responses.length > expectedCount;
                 }}""",
                 arg=initial_response_count,
@@ -279,7 +280,7 @@ class WebUserPage(BasePage):
         question text and diagnostic info.
         """
         import re
-        bubbles = self.page.locator('div[class*="bg-muted"]')
+        bubbles = self.page.locator(self.ASSISTANT_MESSAGE_BUBBLE)
         # Retry to absorb brief re-renders / hydration gaps.
         for _ in range(5):
             total = bubbles.count()
@@ -287,7 +288,7 @@ class WebUserPage(BasePage):
                 try:
                     text = bubbles.nth(total - 1).text_content() or ""
                     cleaned = re.sub(r'\s+', ' ', text).strip()
-                    if cleaned:
+                    if cleaned and cleaned.lower() != "ai-generated content may be incorrect":
                         return cleaned
                 except PlaywightTimeoutError:
                     pass
