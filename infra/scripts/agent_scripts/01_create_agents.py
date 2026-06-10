@@ -79,11 +79,11 @@ async def create_or_update_prompt_agent(
         instructions=instructions,
         tools=tools,
     )
-    result = await project_client.agents.create_version(
+    await project_client.agents.create_version(
         agent_name=name,
         definition=definition,
     )
-    return result.name
+    return name
 
 
 async def get_ai_search_connection_id(project_client: AIProjectClient) -> str:

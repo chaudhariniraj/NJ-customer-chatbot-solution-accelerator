@@ -81,7 +81,12 @@ class TestBYOCCGoldenPath:
         web_user_page.open_chat_window()
         # Warm-up for cold-started Azure Web App backend. Configurable so warm
         # environments can set E2E_WARMUP_MS=0 to skip this delay.
-        warmup_ms = int(os.getenv("E2E_WARMUP_MS", "5000"))
+        warmup_ms_raw = os.getenv("E2E_WARMUP_MS", "5000")
+        try:
+            warmup_ms = int(warmup_ms_raw)
+        except ValueError:
+            logger.warning("Invalid E2E_WARMUP_MS=%r; defaulting to 5000ms", warmup_ms_raw)
+            warmup_ms = 5000
         if warmup_ms > 0:
             page.wait_for_timeout(warmup_ms)
         
@@ -479,8 +484,11 @@ class TestBYOCCGoldenPath:
                     locator.first.click(force=True)
                     clicked_new_session = True
                     break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Fallback force-click failed for selector; trying next. Error: %s",
+                        exc,
+                    )
 
             assert clicked_new_session, "New Session button should be available and clickable"
             

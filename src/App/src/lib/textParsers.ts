@@ -148,11 +148,11 @@ function parseOrderItem(line: string): OrderItem | null {
         const quantity = parseInt(match[2]);
         
         if (format === formats[0] || format === formats[3]) {
-          const unitPrice = parseFloat(match[3].replace(',', ''));
-          const totalPrice = parseFloat(match[4].replace(',', ''));
+          const unitPrice = parseFloat(match[3].replace(/,/g, ''));
+          const totalPrice = parseFloat(match[4].replace(/,/g, ''));
           return { name, quantity, unitPrice, totalPrice };
         } else {
-          const totalPrice = parseFloat(match[3].replace(',', ''));
+          const totalPrice = parseFloat(match[3].replace(/,/g, ''));
           const unitPrice = totalPrice / quantity;
           return { name, quantity, unitPrice, totalPrice };
         }
@@ -169,7 +169,7 @@ function parsePrice(priceText: string | null): number {
   if (!priceText) return 0;
   
   const match = priceText.match(/\$?([0-9,]+\.?\d*)/);
-  return match ? parseFloat(match[1].replace(',', '')) : 0;
+  return match ? parseFloat(match[1].replace(/,/g, '')) : 0;
 }
 
 function normalizeOrderData(order: Partial<Order>): Order {
@@ -273,10 +273,10 @@ function parseProductSection(section: string): Product | null {
     if (!title) return null;
     
     const priceMatch = section.match(/\*\*Price:\*\*\s*\$([0-9,]+\.?\d*)/) || section.match(/[-–]\s*Price:\s*\$([0-9,]+\.?\d*)/) || section.match(/Price:\s*\$([0-9,]+\.?\d*)/);
-    const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : 59.50;
+    const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 59.50;
     
     const originalPriceMatch = section.match(/Originally \$([0-9,]+\.?\d*)/);
-    const originalPrice = originalPriceMatch ? parseFloat(originalPriceMatch[1].replace(',', '')) : undefined;
+    const originalPrice = originalPriceMatch ? parseFloat(originalPriceMatch[1].replace(/,/g, '')) : undefined;
     
     const ratingMatch = section.match(/\*\*Rating:\*\*\s*([0-9.]+)/);
     const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 4.5;

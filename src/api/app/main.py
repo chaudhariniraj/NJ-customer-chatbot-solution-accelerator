@@ -59,7 +59,7 @@ for logger_name in AZURE_LOGGING_PACKAGES:
     )
 # Always suppress agent framework at ERROR level
 logging.getLogger("agent_framework").setLevel(logging.ERROR)
-logging.getLogger("agent_framework_foundry").setLevel(logging.ERROR)
+logging.getLogger("agent_framework.foundry").setLevel(logging.ERROR)
 # Handle both local debugging and Docker deployment
 try:
     # Try relative imports first (for Docker)
