@@ -1,4 +1,5 @@
 import { ChatSidebar } from '@/components/Layout/ChatSidebar';
+import { LoginButton } from '@/components/LoginButton';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -181,11 +182,14 @@ export function WidgetApp({ theme = 'dark' }: WidgetAppProps) {
           <div className="fixed bottom-4 right-4 z-[2147483646] flex flex-col items-end gap-2">
             {panelOpen ? (
               <div className="flex h-[min(85vh,640px)] w-[min(100vw-2rem,420px)] flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl">
-                <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
                   <span className="text-sm font-semibold">Chat</span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setPanelOpen(false)}>
-                    Close
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <LoginButton showGuestActions compact />
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setPanelOpen(false)}>
+                      Close
+                    </Button>
+                  </div>
                 </div>
                 <div className="min-h-0 flex-1">
                   <ChatSidebar

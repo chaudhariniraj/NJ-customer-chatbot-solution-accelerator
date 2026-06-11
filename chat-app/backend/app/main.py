@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 try:
     from opentelemetry import trace
@@ -153,13 +154,27 @@ async def attach_trace_attributes(request: Request, call_next):
     return await call_next(request)
 
 
+_cors_origins = frozenset(settings.allowed_origins)
+
+
+class _FixCredentialedCorsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        origin = request.headers.get("origin")
+        if origin and origin in _cors_origins:
+            response.headers["access-control-allow-origin"] = origin
+            response.headers["access-control-allow-credentials"] = "true"
+        return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=list(_cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(_FixCredentialedCorsMiddleware)
 
 app.include_router(auth.router)
 app.include_router(chat.router)

@@ -11,13 +11,7 @@ function runtimeStr(key: keyof NonNullable<Window['__RUNTIME_CONFIG__']>): strin
 }
 
 function widgetScriptBase(): string {
-  const explicit =
-    runtimeStr('VITE_CHAT_WIDGET_ORIGIN') ||
-    String(import.meta.env.VITE_CHAT_WIDGET_ORIGIN ?? '').trim();
-  if (explicit) {
-    return trimSlash(explicit);
-  }
-  if (import.meta.env.DEV && typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && window.location.origin) {
     return trimSlash(window.location.origin);
   }
   return '';
@@ -41,7 +35,7 @@ export function embedChatWidget() {
       script.src,
       import.meta.env.DEV
         ? 'Build the widget: cd chat-app/frontend && npm run build'
-        : '',
+        : 'Redeploy ccsa-ecom-frontend from repo root (see ecommerce-app/frontend/Dockerfile).',
     );
   });
   script.addEventListener('load', () => {

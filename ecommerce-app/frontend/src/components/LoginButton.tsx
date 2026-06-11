@@ -12,8 +12,13 @@ import {
 import { Person20Regular, SignOut20Regular } from '@fluentui/react-icons';
 import { ShieldWarning, Spinner } from '@phosphor-icons/react';
 
-export function LoginButton() {
-  const { user, isLoading, logout, isAuthenticated, isIdentityProviderConfigured } = useAuth();
+type LoginButtonProps = {
+  showGuestActions?: boolean;
+  compact?: boolean;
+};
+
+export function LoginButton({ showGuestActions = true, compact = false }: LoginButtonProps) {
+  const { user, isLoading, login, logout, isAuthenticated, isIdentityProviderConfigured } = useAuth();
 
   if (isLoading) {
     return (
@@ -24,11 +29,9 @@ export function LoginButton() {
   }
 
   if (isAuthenticated && user) {
-    // Better initials logic for email addresses
-    let initials = "U"; // Default fallback
-    
+    let initials = "U";
+
     if (user.name && user.name.includes("@")) {
-      // For email addresses like "john.doe@contoso.com"
       const emailPrefix = user.name.split("@")[0];
       const parts = emailPrefix.split(".");
       if (parts.length >= 2) {
@@ -37,7 +40,6 @@ export function LoginButton() {
         initials = emailPrefix.substring(0, 2).toUpperCase();
       }
     } else if (user.name) {
-      // For regular names like "John Doe"
       initials = user.name
         .split(' ')
         .map((n) => n[0])
@@ -54,9 +56,9 @@ export function LoginButton() {
               variant="ghost"
               size="small"
               className="transition-all duration-200 hover:bg-accent p-1"
-              title={`(${user.email})`}
+              title={user.email}
             >
-              <Avatar className="w-8 h-8">
+              <Avatar className={compact ? 'w-7 h-7' : 'w-8 h-8'}>
                 <AvatarImage src={undefined} alt={user.name} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                   {initials}
@@ -66,25 +68,14 @@ export function LoginButton() {
           </MenuTrigger>
           <MenuPopover>
             <MenuList>
-              <MenuItem
-                icon={<Person20Regular />}
-                disabled
-                style={{ cursor: 'default' }}
-              >
+              <MenuItem icon={<Person20Regular />} disabled style={{ cursor: 'default' }}>
                 <div className="flex flex-col min-w-0 max-w-[220px]">
-                  <span className="font-semibold text-sm truncate block">
-                    {user.name}
-                  </span>
-                  <span className="text-xs text-gray-500 truncate block">
-                    {user.email}
-                  </span>
+                  <span className="font-semibold text-sm truncate block">{user.name}</span>
+                  <span className="text-xs text-gray-500 truncate block">{user.email}</span>
                 </div>
               </MenuItem>
               <MenuDivider />
-              <MenuItem
-                icon={<SignOut20Regular />}
-                onClick={logout}
-              >
+              <MenuItem icon={<SignOut20Regular />} onClick={logout}>
                 Logout
               </MenuItem>
             </MenuList>
@@ -94,36 +85,35 @@ export function LoginButton() {
     );
   }
 
-  // If Identity Provider is configured but user is not authenticated, show login button
-  if (isIdentityProviderConfigured && !isAuthenticated) {
+  if (!isIdentityProviderConfigured) {
     return (
       <Button
-        variant="default"
+        variant="outline"
         size="small"
-        onClick={() => {
-          // Use frontend's Easy Auth login endpoint
-          window.location.href = '/.auth/login/aad';
-        }}
-        className="transition-all duration-200 flex items-center gap-2"
-        title="Login with Microsoft"
+        disabled
+        className="transition-all duration-200 flex items-center gap-2 opacity-50 cursor-not-allowed"
+        title="Enable Identity Provider in Azure Portal to enable authentication"
       >
         <ShieldWarning className="w-5 h-5" />
-        <span className="hidden sm:inline text-xs">Login</span>
+        {!compact && <span className="hidden sm:inline text-xs">Enable Identity Provider</span>}
       </Button>
     );
   }
 
-  // If Identity Provider is not configured, show disabled button
-  return (
-    <Button
-      variant="outline"
-      size="small"
-      disabled
-      className="transition-all duration-200 flex items-center gap-2 opacity-50 cursor-not-allowed"
-      title="Enable Identity Provider in Azure Portal to enable authentication"
-    >
-      <ShieldWarning className="w-5 h-5" />
-      <span className="hidden sm:inline text-xs">Enable Identity Provider</span>
-    </Button>
-  );
+  if (showGuestActions) {
+    return (
+      <Button
+        variant="default"
+        size="small"
+        onClick={login}
+        className="transition-all duration-200 flex items-center gap-2"
+        title="Sign in with Microsoft"
+      >
+        <ShieldWarning className="w-5 h-5" />
+        {!compact && <span className="text-xs">Login</span>}
+      </Button>
+    );
+  }
+
+  return null;
 }

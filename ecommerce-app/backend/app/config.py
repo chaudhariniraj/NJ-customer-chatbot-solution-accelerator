@@ -2,11 +2,20 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
-# Get the absolute path to the .env file
-_current_dir = Path(__file__).parent  # This is the app directory
-_env_file_path = _current_dir.parent / ".env"  # Go up one level to backend/.env
+_current_dir = Path(__file__).resolve().parent
+_backend_dir = _current_dir.parent
+_env_file_path = _backend_dir / ".env"
+_ecommerce_dir = _backend_dir.parent
+_repo_root_env = _ecommerce_dir.parent / ".env"
+
+for _p in (_repo_root_env, _ecommerce_dir / ".env"):
+    if _p.is_file():
+        load_dotenv(_p, override=False)
+if _env_file_path.is_file():
+    load_dotenv(_env_file_path, override=True)
 
 
 class Settings(BaseSettings):
@@ -41,8 +50,8 @@ class Settings(BaseSettings):
         "products": "products",
         "users": "users",
         "carts": "carts",
-        "orders": "orders",
-        "customers": "customers",
+        "chat_sessions": "chat_sessions",
+        "transactions": "transactions",
     }
 
     # Azure Search (for product search)
@@ -74,7 +83,8 @@ settings = Settings()
 
 # Check if we have Cosmos DB configuration
 def has_cosmos_db_config() -> bool:
-    return settings.cosmos_db_endpoint is not None
+    v = settings.cosmos_db_endpoint
+    return v is not None and str(v).strip() != ""
 
 
 # Check if we have Azure Search configuration

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import logging
 from typing import Any, Dict, List, Optional
 
 from .config import has_cosmos_db_config
@@ -14,6 +15,9 @@ from .models import (
     ProductCreate,
     ProductUpdate,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class EcommerceDatabaseService(ABC):
@@ -131,9 +135,14 @@ def get_database_service() -> EcommerceDatabaseService:
             except ImportError:
                 from cosmos_service import EcommerceCosmosService
             return EcommerceCosmosService()
-        except ImportError:
-            print("Cosmos DB dependencies not found, falling back to in-memory service")
+        except ImportError as exc:
+            logger.warning(
+                "Cosmos service import failed; using in-memory DB. Cause: %s",
+                exc,
+                exc_info=True,
+            )
             from .memory_service import EcommerceMemoryService
+
             return EcommerceMemoryService()
     else:
         print("No Cosmos DB configuration found, using in-memory service")

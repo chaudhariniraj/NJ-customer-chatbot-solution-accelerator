@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { ErrorFallback } from '@/ErrorFallback';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { setEmbedAuthBaseUrl } from '@/lib/embedContext';
+import { setEmbedAuthBaseUrl, setUseHostPageAuth } from '@/lib/embedContext';
 import { setWidgetApiBaseOverride } from '@/lib/api';
 import { WidgetApp } from '@/WidgetApp.tsx';
 
@@ -22,6 +22,7 @@ export function mountWidget(config: WidgetInitConfig, inlinedCss: string) {
   const scriptBase = (config.scriptBaseUrl ?? '').trim().replace(/\/$/, '');
   setWidgetApiBaseOverride(apiBase);
   setEmbedAuthBaseUrl(scriptBase || null);
+  setUseHostPageAuth(true);
   if (widgetRoot && widgetHost) {
     widgetRoot.unmount();
     widgetHost.remove();

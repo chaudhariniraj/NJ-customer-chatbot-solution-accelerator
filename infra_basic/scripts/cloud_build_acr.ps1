@@ -18,24 +18,30 @@ $rChatFe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_CHAT_FRONTEND_IMAGE
 $rEcomBe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_ECOMMERCE_BACKEND_IMAGE_REPO)) { 'ccsa-ecom-backend' } else { $env:AZURE_ENV_ECOMMERCE_BACKEND_IMAGE_REPO })
 $rEcomFe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_ECOMMERCE_FRONTEND_IMAGE_REPO)) { 'ccsa-ecom-frontend' } else { $env:AZURE_ENV_ECOMMERCE_FRONTEND_IMAGE_REPO })
 
+$ecomFeDockerfile = Join-Path $repoRoot 'ecommerce-app' 'frontend' 'Dockerfile'
 $builds = @(
   @{ Repo = $rChatBe; Ctx = (Join-Path $repoRoot 'chat-app' 'backend') }
   @{ Repo = $rChatFe; Ctx = (Join-Path $repoRoot 'chat-app' 'frontend') }
   @{ Repo = $rEcomBe; Ctx = (Join-Path $repoRoot 'ecommerce-app' 'backend') }
-  @{ Repo = $rEcomFe; Ctx = (Join-Path $repoRoot 'ecommerce-app' 'frontend') }
+  @{ Repo = $rEcomFe; Ctx = $repoRoot; Dockerfile = $ecomFeDockerfile }
 )
 
 foreach ($b in $builds) {
   $ctxFull = (Resolve-Path -LiteralPath $b.Ctx).Path
-  $dockerfile = Join-Path $ctxFull 'Dockerfile'
+  $dockerfile = if ($b.Dockerfile) { $b.Dockerfile } else { Join-Path $ctxFull 'Dockerfile' }
   if (-not (Test-Path -LiteralPath $dockerfile)) {
     throw "Dockerfile not found: $dockerfile"
   }
+  $dockerfileArg = if ($b.Dockerfile) {
+    (Resolve-Path -LiteralPath $dockerfile).Path.Substring($ctxFull.Length).TrimStart('\', '/')
+  } else {
+    'Dockerfile'
+  }
   $imageRef = "$($b.Repo):$tag"
-  Write-Host "az acr build (cwd=$ctxFull) --registry `"$reg`" --image `"$imageRef`" --file Dockerfile --platform linux ."
+  Write-Host "az acr build (cwd=$ctxFull) --registry `"$reg`" --image `"$imageRef`" --file $dockerfileArg --platform linux ."
   Push-Location $ctxFull
   try {
-    az acr build --registry "$reg" --image "$imageRef" --file Dockerfile --platform linux .
+    az acr build --registry "$reg" --image "$imageRef" --file "$dockerfileArg" --platform linux .
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   }
   finally {

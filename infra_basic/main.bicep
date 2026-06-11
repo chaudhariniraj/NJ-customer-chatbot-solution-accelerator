@@ -380,7 +380,6 @@ module ecommerce_frontend_docker 'deploy_frontend_docker.bicep' = {
     appSettings: {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: ecommerce_backend_docker.outputs.appUrl
-      VITE_CHAT_WIDGET_ORIGIN: 'https://${chatFeWebAppName}.azurewebsites.net'
       VITE_CHAT_API_BASE_URL: chat_backend_docker.outputs.appUrl
     }
   }

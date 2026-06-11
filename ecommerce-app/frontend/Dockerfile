@@ -1,37 +1,23 @@
-# Multi-stage build for React frontend
-FROM node:20-alpine AS builder
- 
-# Set working directory
-WORKDIR /app
- 
-# Copy package files
-COPY package*.json ./
- 
-# Install dependencies with legacy peer deps for React 19 compatibility
+FROM node:20-alpine AS widget-builder
+WORKDIR /src/chat-app/frontend
+COPY chat-app/frontend/package*.json ./
 RUN npm ci --legacy-peer-deps
- 
-# Copy source code (excluding node_modules)
-COPY . .
- 
-# Build the application
+COPY chat-app/frontend/ ./
 RUN npm run build
- 
-# Production stage
+
+FROM node:20-alpine AS app-builder
+WORKDIR /src/ecommerce-app/frontend
+COPY ecommerce-app/frontend/package*.json ./
+RUN npm ci --legacy-peer-deps
+COPY ecommerce-app/frontend/ ./
+RUN npm run build
+COPY --from=widget-builder /src/chat-app/frontend/dist/widget.js ./dist/widget.js
+
 FROM nginx:alpine
- 
-# Copy built files from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
- 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
- 
-# Copy startup script
-COPY startup.sh /docker-entrypoint.d/startup.sh
+COPY --from=app-builder /src/ecommerce-app/frontend/dist /usr/share/nginx/html
+COPY ecommerce-app/frontend/nginx.conf /etc/nginx/nginx.conf
+COPY ecommerce-app/frontend/startup.sh /docker-entrypoint.d/startup.sh
 RUN chmod +x /docker-entrypoint.d/startup.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.d/startup.sh
- 
-# Expose port 80
 EXPOSE 80
- 
-# Start with custom script that injects environment variables
 CMD ["/bin/sh", "-c", "/docker-entrypoint.d/startup.sh"]

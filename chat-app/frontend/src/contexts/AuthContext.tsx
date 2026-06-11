@@ -1,5 +1,5 @@
 import { api, setEasyAuthHeaders } from '@/lib/api';
-import { getEmbedAuthBaseUrl } from '@/lib/embedContext';
+import { isWidgetEmbedded, resolveAuthOrigin } from '@/lib/embedContext';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 export interface User {
@@ -22,46 +22,123 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Claim type to simplified key mapping (module-level constant)
+const AUTH_REDIRECT_KEY = 'ccsa_easyauth_redirect';
+
 const CLAIM_TYPE_MAP: Record<string, string> = {
   'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress': 'email',
   'http://schemas.microsoft.com/identity/claims/objectidentifier': 'oid',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier': 'nameidentifier',
   'preferred_username': 'preferred_username',
   'name': 'name',
+  'sub': 'sub',
 };
 
-async function fetchEasyAuthHeaders(): Promise<Record<string, string> | null> {
+type EasyAuthProbe = {
+  headers: Record<string, string> | null;
+  providerConfigured: boolean;
+  needsLoginRedirect: boolean;
+};
+
+function easyAuthMeUrl(): string {
+  if (isWidgetEmbedded()) {
+    return '/.auth/me';
+  }
+  const authBase = resolveAuthOrigin();
+  return authBase ? `${authBase}/.auth/me` : '/.auth/me';
+}
+
+function easyAuthLoginUrl(): string {
+  if (isWidgetEmbedded()) {
+    return '/.auth/login/aad';
+  }
+  const authBase = resolveAuthOrigin();
+  return authBase ? `${authBase}/.auth/login/aad` : '/.auth/login/aad';
+}
+
+function easyAuthLogoutUrl(): string {
+  if (isWidgetEmbedded()) {
+    return '/.auth/logout';
+  }
+  const authBase = resolveAuthOrigin();
+  return authBase ? `${authBase}/.auth/logout` : '/.auth/logout';
+}
+
+function loginRedirectAlreadyAttempted(): boolean {
   try {
-    const authBase = getEmbedAuthBaseUrl();
-    const meUrl = authBase ? `${authBase}/.auth/me` : '/.auth/me';
-    const response = await fetch(meUrl, { 
+    return sessionStorage.getItem(AUTH_REDIRECT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markLoginRedirectAttempted(): void {
+  try {
+    sessionStorage.setItem(AUTH_REDIRECT_KEY, '1');
+  } catch {
+  }
+}
+
+function clearLoginRedirectAttempted(): void {
+  try {
+    sessionStorage.removeItem(AUTH_REDIRECT_KEY);
+  } catch {
+  }
+}
+
+async function probeEasyAuth(): Promise<EasyAuthProbe> {
+  try {
+    const response = await fetch(easyAuthMeUrl(), {
       credentials: 'include',
-      redirect: 'manual'  // Don't follow redirects - prevents CORS error on unauthenticated redirect
+      redirect: 'manual',
     });
-    
-    // redirect: 'manual' returns opaque redirect response (type='opaqueredirect', status=0) when redirected
-    if (!response.ok || response.type === 'opaqueredirect') return null;
-    
+
+    if (response.type === 'opaqueredirect') {
+      return { headers: null, providerConfigured: true, needsLoginRedirect: true };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return { headers: null, providerConfigured: true, needsLoginRedirect: true };
+    }
+
+    if (!response.ok) {
+      return { headers: null, providerConfigured: false, needsLoginRedirect: false };
+    }
+
     const authData = await response.json();
-    if (!authData?.length) return null;
-    
+    if (!authData?.length) {
+      return { headers: null, providerConfigured: true, needsLoginRedirect: true };
+    }
+
     const { user_claims: claims, provider_name, id_token } = authData[0];
-    
-    // Build claims object with simplified keys
     const claimsObject = claims.reduce((acc: Record<string, string>, { typ, val }: { typ: string; val: string }) => {
       acc[CLAIM_TYPE_MAP[typ] || typ.split('/').pop() || typ] = val;
       return acc;
     }, {});
-    
+
+    const principalId = (
+      claimsObject.oid ||
+      claimsObject.nameidentifier ||
+      claimsObject.sub ||
+      ''
+    ).trim();
+
+    if (!principalId) {
+      return { headers: null, providerConfigured: true, needsLoginRedirect: true };
+    }
+
     return {
-      'x-ms-client-principal-id': claimsObject.oid,
-      'x-ms-client-principal-name': claimsObject.name || claimsObject.email || claimsObject.preferred_username,
-      'x-ms-client-principal-idp': provider_name,
-      'x-ms-token-aad-id-token': id_token,
-      'x-ms-client-principal': btoa(JSON.stringify(claimsObject)),
+      headers: {
+        'x-ms-client-principal-id': principalId,
+        'x-ms-client-principal-name': claimsObject.name || claimsObject.email || claimsObject.preferred_username,
+        'x-ms-client-principal-idp': provider_name,
+        'x-ms-token-aad-id-token': id_token,
+        'x-ms-client-principal': btoa(JSON.stringify({ ...claimsObject, oid: principalId })),
+      },
+      providerConfigured: true,
+      needsLoginRedirect: false,
     };
   } catch {
-    return null;
+    return { headers: null, providerConfigured: isWidgetEmbedded(), needsLoginRedirect: false };
   }
 }
 
@@ -69,6 +146,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isIdentityProviderConfigured, setIsIdentityProviderConfigured] = useState(false);
+
+  const login = () => {
+    markLoginRedirectAttempted();
+    window.location.href = easyAuthLoginUrl();
+  };
+
+  const logout = () => {
+    setEasyAuthHeaders(null);
+    clearLoginRedirectAttempted();
+    window.location.href = easyAuthLogoutUrl();
+  };
 
   useEffect(() => {
     let isAuthenticating = false;
@@ -78,76 +166,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 1000;
 
+    const finishLoading = () => {
+      if (!isMounted) return;
+      setIsLoading(false);
+      isAuthenticating = false;
+    };
+
     const initializeAuth = async (isRetry = false) => {
       if (isAuthenticating || !isMounted) return;
 
       isAuthenticating = true;
       if (!isRetry) retryCount = 0;
 
+      let providerConfigured = false;
       try {
-        const easyAuthHeaders = await fetchEasyAuthHeaders();
+        const authProbe = await probeEasyAuth();
+        providerConfigured = authProbe.providerConfigured;
+
+        const easyAuthHeaders = authProbe.headers;
         if (easyAuthHeaders) {
           setEasyAuthHeaders(easyAuthHeaders);
+          clearLoginRedirectAttempted();
+        } else {
+          setEasyAuthHeaders(null);
         }
-        
+
         const response = await api.get('/api/auth/me');
-        
-        // Retry if got guest user but have Easy Auth headers (auth not ready yet)
-        if (response.data.is_guest && easyAuthHeaders && retryCount < MAX_RETRIES) {
+
+        const principalId = easyAuthHeaders?.['x-ms-client-principal-id'];
+        if (
+          response.data.is_guest &&
+          principalId &&
+          retryCount < MAX_RETRIES
+        ) {
           retryCount++;
           retryTimeoutId = setTimeout(() => {
             isAuthenticating = false;
             initializeAuth(true);
           }, RETRY_DELAY);
+          isAuthenticating = false;
           return;
         }
-        
+
         if (!isMounted) return;
-        
+
         setUser(response.data);
         setIsIdentityProviderConfigured(
-          !response.data.is_guest || response.data.is_authenticated || !!easyAuthHeaders
+          providerConfigured ||
+            !response.data.is_guest ||
+            response.data.is_authenticated
         );
-        setIsLoading(false);
-        isAuthenticating = false;
-        
+        finishLoading();
       } catch (error: any) {
         if (!isMounted) return;
-        
-        setIsIdentityProviderConfigured(error.response?.status === 302);
+
+        setIsIdentityProviderConfigured(
+          providerConfigured || error.response?.status === 302
+        );
         setUser(null);
-        setIsLoading(false);
-        isAuthenticating = false;
+        finishLoading();
       }
     };
 
     initializeAuth();
-    
+
     const handleVisibilityChange = () => {
       if (!document.hidden) initializeAuth();
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       isMounted = false;
       if (retryTimeoutId) clearTimeout(retryTimeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
-
-  const login = () => {
-    const authBase = getEmbedAuthBaseUrl();
-    const prefix = authBase ? `${authBase}` : '';
-    window.location.href = `${prefix}/.auth/login/aad`;
-  };
-
-  const logout = () => {
-    setEasyAuthHeaders(null);
-    const authBase = getEmbedAuthBaseUrl();
-    const prefix = authBase ? `${authBase}` : '';
-    window.location.href = `${prefix}/.auth/logout`;
-  };
 
   const value: AuthContextType = {
     user,
