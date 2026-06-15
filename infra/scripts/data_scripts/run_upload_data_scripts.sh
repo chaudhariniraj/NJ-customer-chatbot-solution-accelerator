@@ -152,13 +152,19 @@ enable_public_access() {
 	if [ "$original_cosmos_public_access" = "Enabled" ]; then
 		echo "✓ Cosmos DB public access already enabled - no changes needed"
 	else
-		# Capture current firewall rules so they can be restored later.
+		# Abort if the read fails so restore never wipes rules with an empty set.
 		echo "Getting current firewall configuration..."
 		original_cosmos_ip_filter=$(MSYS_NO_PATHCONV=1 az resource show \
 			--ids "$cosmos_resource_id" \
 			--api-version 2021-04-15 \
 			--query "properties.ipRules" \
-			--output json 2>/dev/null || echo "[]")
+			--output json 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			echo "Error: Failed to read existing Cosmos DB firewall rules; aborting before any network changes to avoid wiping them on restore." >&2
+			# No changes were made yet, so skip the restore trap (it would write ipRules=[]).
+			trap - EXIT INT TERM
+			exit 1
+		fi
 
 		echo "Cosmos DB public access is '$original_cosmos_public_access' - enabling access"
 
@@ -166,6 +172,7 @@ enable_public_access() {
 			# Explicit override for proxy/VPN environments where the auto-detected IP
 			# differs from the IP Cosmos actually sees. Comma-separated IPs/CIDRs.
 			echo "Using COSMOS_FIREWALL_IP override: $COSMOS_FIREWALL_IP"
+			current_ip="$COSMOS_FIREWALL_IP"
 			ip_rules="["
 			IFS=',' read -ra _override_ips <<< "$COSMOS_FIREWALL_IP"
 			for _ip in "${_override_ips[@]}"; do
@@ -724,7 +731,7 @@ while true; do
 			if [ "$retry_rules" != "[" ]; then retry_rules="${retry_rules},"; fi
 			retry_rules="${retry_rules}{\"ipAddressOrRange\":\"${_eip}\"}"
 		done <<< "$existing_ips"
-		if ! echo "$existing_ips" | grep -qx "$blocked_ip"; then
+		if ! echo "$existing_ips" | grep -Fqx "$blocked_ip"; then
 			if [ "$retry_rules" != "[" ]; then retry_rules="${retry_rules},"; fi
 			retry_rules="${retry_rules}{\"ipAddressOrRange\":\"${blocked_ip}\"}"
 		fi

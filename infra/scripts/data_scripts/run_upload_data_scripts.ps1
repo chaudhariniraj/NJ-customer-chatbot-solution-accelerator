@@ -421,6 +421,7 @@ $cosmosAccessEnabled = $false
 # Capture existing firewall rules up front so they can be restored accurately,
 # even if IPs are added during Forbidden recovery below.
 $originalCosmosIpFilter = az resource show --ids $cosmos_resource_id --api-version 2021-04-15 --query "properties.ipRules" -o json 2>$null
+$ipFilterReadFailed = ($LASTEXITCODE -ne 0)
 if (-not $originalCosmosIpFilter) {
     $originalCosmosIpFilter = "[]"
 }
@@ -429,6 +430,9 @@ if (-not $originalCosmosIpFilter) {
 if ($originalCosmosPublicAccess -eq "Enabled") {
     Write-Host "✓ Cosmos DB public access already enabled - no changes needed"
 } else {
+    if ($ipFilterReadFailed) {
+        throw "Failed to read existing Cosmos DB firewall rules (az resource show exit code $LASTEXITCODE); aborting before any network changes to avoid wiping them on restore."
+    }
     # Determine the IP to whitelist. In proxy/VPN environments the auto-detected
     # IP can differ from the IP Cosmos actually sees, so allow an explicit override
     # (single IP/CIDR or comma-separated list) via COSMOS_FIREWALL_IP.
@@ -505,7 +509,7 @@ try {
             $retryIpRuleJson = "[" + (($ipList | ForEach-Object { "{\`"ipAddressOrRange\`":\`"$_\`"}" }) -join ",") + "]"
             $updateError = az resource update --ids $cosmos_resource_id --api-version 2021-04-15 --set "properties.ipRules=$retryIpRuleJson" --set "properties.publicNetworkAccess=Enabled" --output none 2>&1
             if ($LASTEXITCODE -ne 0) {
-                throw "Failed to add blocked IP $blockedIp to the Cosmos DB firewall (az resource update exit code $LASTEXITCODE): $updateError"
+                throw "Failed to add blocked IP $blockedIp to the Cosmos DB firewall (az resource update exit code $LASTEXITCODE): $($updateError | Out-String)"
             }
             $cosmosAccessEnabled = $true
             Write-Host "Waiting for Cosmos DB network changes to take effect (30 seconds)..."
