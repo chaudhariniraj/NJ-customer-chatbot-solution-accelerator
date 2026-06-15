@@ -538,6 +538,51 @@ jobs:
             echo "ℹ️ Automatic trigger: AZURE_LOCATION resolved from allowed regions list"
           fi
 
+      - name: Check Subscription-Wide Search Service Quota
+        id: search-subscription-quota
+        shell: bash
+        env:
+          WAF_ENABLED: ${{ env.WAF_ENABLED }}
+        run: |
+          set -euo pipefail
+          if [[ "$WAF_ENABLED" == "true" ]]; then
+            SEARCH_TIER="standard"
+          else
+            SEARCH_TIER="basic"
+          fi
+
+          echo "🔍 Checking subscription-wide $SEARCH_TIER tier Azure Search service count..."
+          TOTAL_SERVICES=$(az search service list --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+            --query "[?sku.name=='${SEARCH_TIER}'] | length(@)" -o tsv 2>/dev/null || echo "0")
+
+          # Subscription limits: basic=12, standard=12 (typical defaults)
+          # Use 12 as safe upper bound for both tiers
+          SUBSCRIPTION_LIMIT=12
+          REMAINING=$((SUBSCRIPTION_LIMIT - TOTAL_SERVICES))
+
+          echo "   $SEARCH_TIER tier: In use=$TOTAL_SERVICES | Subscription limit=$SUBSCRIPTION_LIMIT | Remaining=$REMAINING"
+
+          if [ "$REMAINING" -le 0 ]; then
+            echo ""
+            echo "❌ SUBSCRIPTION SEARCH QUOTA EXHAUSTED"
+            echo "The subscription has reached its limit of $SUBSCRIPTION_LIMIT $SEARCH_TIER tier Azure Search services."
+            echo "To resolve: delete unused Search services (from previous test deployments) in the Azure Portal:"
+            echo "  https://portal.azure.com/#view/Microsoft_Azure_Search/SearchService.ReactView"
+            echo ""
+            EXISTING_SERVICES=$(az search service list --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }} \
+              --query "[?sku.name=='${SEARCH_TIER}'].[name, resourceGroup, location]" -o tsv 2>/dev/null || echo "Unable to list")
+            echo "Existing $SEARCH_TIER tier Search services:"
+            echo "$EXISTING_SERVICES"
+            echo ""
+            echo "## ❌ Azure Search Subscription Quota Exhausted" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The subscription has **$TOTAL_SERVICES / $SUBSCRIPTION_LIMIT** $SEARCH_TIER tier Search services in use." >> $GITHUB_STEP_SUMMARY
+            echo "Delete unused services from previous test deployments before re-running." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          echo "✅ Subscription has $REMAINING $SEARCH_TIER tier Search service slots available."
+
       - name: Generate Resource Group Name
         id: generate_rg_name
         shell: bash
