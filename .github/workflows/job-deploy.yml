@@ -284,6 +284,7 @@ jobs:
           INPUT_TRIGGER_TYPE: ${{ inputs.trigger_type }}
           INPUT_AZURE_LOCATION: ${{ inputs.azure_location }}
           AZURE_REGIONS_FALLBACK: ${{ vars.AZURE_REGIONS }}
+          AZURE_NONAI_LOCATIONS_FALLBACK: ${{ vars.AZURE_NONAI_LOCATIONS }}
           GPT_MIN_CAPACITY: ${{ env.GPT_MIN_CAPACITY }}
           GPT_REALTIME_MIN_CAPACITY: ${{ env.GPT_REALTIME_MIN_CAPACITY }}
         run: |
@@ -292,8 +293,16 @@ jobs:
             export AZURE_REGIONS="$INPUT_AZURE_LOCATION"
             echo "📋 Manual trigger: validating AI quota only for user-selected region '$INPUT_AZURE_LOCATION'"
           else
-            export AZURE_REGIONS="$AZURE_REGIONS_FALLBACK"
-            echo "📋 Automatic trigger: validating AI quota across configured regions '$AZURE_REGIONS'"
+            if [[ -n "${AZURE_REGIONS_FALLBACK:-}" ]]; then
+              export AZURE_REGIONS="$AZURE_REGIONS_FALLBACK"
+              echo "📋 Automatic trigger: validating AI quota across configured regions '$AZURE_REGIONS'"
+            elif [[ -n "${AZURE_NONAI_LOCATIONS_FALLBACK:-}" ]]; then
+              export AZURE_REGIONS="$AZURE_NONAI_LOCATIONS_FALLBACK"
+              echo "⚠️ AZURE_REGIONS is empty. Falling back to AZURE_NONAI_LOCATIONS for AI quota validation: '$AZURE_REGIONS'"
+            else
+              echo "❌ ERROR: No region lists configured. Set GitHub variable AZURE_REGIONS (preferred) or AZURE_NONAI_LOCATIONS."
+              exit 1
+            fi
           fi
 
           chmod +x infra/scripts/checkquota.sh
@@ -319,6 +328,8 @@ jobs:
           INPUT_AZURE_LOCATION: ${{ inputs.azure_location }}
           TRIGGER_TYPE: ${{ inputs.trigger_type }}
           ALLOWED_AZURE_LOCATIONS: ${{ vars.AZURE_NONAI_LOCATIONS }}
+          AI_VALID_REGION: ${{ env.VALID_REGION }}
+          AZURE_REGIONS_FALLBACK: ${{ vars.AZURE_REGIONS }}
         run: |
           # Determine search tier based on WAF (scalability) setting
           # WAF enabled → standard tier, WAF disabled → basic tier
@@ -355,9 +366,19 @@ jobs:
           }
 
           # Parse allowed regions list (used by automatic triggers AND as fallback report for manual triggers)
+          # Fallback order:
+          # 1) AZURE_NONAI_LOCATIONS (preferred)
+          # 2) VALID_REGION from AI quota check
+          # 3) AZURE_REGIONS
           ALLOWED_REGIONS=()
           if [[ -n "$ALLOWED_AZURE_LOCATIONS" ]]; then
             IFS=', ' read -r -a ALLOWED_REGIONS <<< "$ALLOWED_AZURE_LOCATIONS"
+          elif [[ -n "${AI_VALID_REGION:-}" ]]; then
+            ALLOWED_REGIONS=("$AI_VALID_REGION")
+            echo "⚠️ AZURE_NONAI_LOCATIONS is empty. Falling back to AI quota-selected region '$AI_VALID_REGION' for Search quota validation."
+          elif [[ -n "${AZURE_REGIONS_FALLBACK:-}" ]]; then
+            IFS=', ' read -r -a ALLOWED_REGIONS <<< "$AZURE_REGIONS_FALLBACK"
+            echo "⚠️ AZURE_NONAI_LOCATIONS is empty. Falling back to AZURE_REGIONS for Search quota validation: '${ALLOWED_REGIONS[*]}'"
           fi
 
           SEARCH_VALID_REGION=""
