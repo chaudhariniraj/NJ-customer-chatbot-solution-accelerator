@@ -886,7 +886,7 @@ resource searchService 'Microsoft.Search/searchServices@2026-03-01-preview' = {
   name: searchServiceName
   location: location
   sku: {
-    name: enableScalability ? 'basic' : 'standard'
+    name: enableScalability ? 'standard' : 'basic'
   }
 }
 
