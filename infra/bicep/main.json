@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "4463141512778825901"
+      "templateHash": "8843895763047198838"
     }
   },
   "parameters": {
@@ -594,7 +594,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "11485436297336856285"
+              "templateHash": "4327335449716752728"
             }
           },
           "parameters": {
@@ -743,6 +743,13 @@
             "endpoint": {
               "type": "string",
               "metadata": {
+                "description": "Endpoint of the AI Services account (Cognitive Services)."
+              },
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-12-01').endpoint]"
+            },
+            "openAiEndpoint": {
+              "type": "string",
+              "metadata": {
                 "description": "Endpoint of the AI Services account (OpenAI Language Model Instance API)."
               },
               "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-12-01').endpoints['OpenAI Language Model Instance API']]"
@@ -820,7 +827,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "16532361737803235909"
+              "templateHash": "12251606071853570465"
             }
           },
           "parameters": {
@@ -854,6 +861,13 @@
               "value": "[parameters('name')]"
             },
             "endpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Endpoint of the AI Services account (Cognitive Services)."
+              },
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-12-01').endpoint]"
+            },
+            "openAiEndpoint": {
               "type": "string",
               "metadata": {
                 "description": "Endpoint of the AI Services account (OpenAI Language Model Instance API)."
@@ -1065,6 +1079,21 @@
           },
           "location": {
             "value": "[parameters('location')]"
+          },
+          "disableLocalAuth": {
+            "value": false
+          },
+          "authOptions": {
+            "value": {
+              "aadOrApiKey": {
+                "aadAuthFailureMode": "http401WithBearerChallenge"
+              }
+            }
+          },
+          "networkRuleSet": {
+            "value": {
+              "bypass": "AzureServices"
+            }
           }
         },
         "template": {
@@ -1074,7 +1103,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "6257848814063201814"
+              "templateHash": "1497887351577571547"
             }
           },
           "parameters": {
@@ -1165,6 +1194,20 @@
                 "description": "Whether to disable local authentication."
               }
             },
+            "authOptions": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Optional. Authentication options for the search service."
+              }
+            },
+            "networkRuleSet": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Optional. Network rule set for the search service."
+              }
+            },
             "managedIdentityType": {
               "type": "string",
               "defaultValue": "SystemAssigned",
@@ -1227,6 +1270,12 @@
                   "disableLocalAuth": {
                     "value": "[parameters('disableLocalAuth')]"
                   },
+                  "authOptions": {
+                    "value": "[parameters('authOptions')]"
+                  },
+                  "networkRuleSet": {
+                    "value": "[parameters('networkRuleSet')]"
+                  },
                   "managedIdentityType": {
                     "value": "[parameters('managedIdentityType')]"
                   },
@@ -1241,7 +1290,7 @@
                     "_generator": {
                       "name": "bicep",
                       "version": "0.44.1.10279",
-                      "templateHash": "11018325800773519753"
+                      "templateHash": "10414963800025954513"
                     }
                   },
                   "parameters": {
@@ -1310,6 +1359,20 @@
                         "description": "Whether to disable local authentication."
                       }
                     },
+                    "authOptions": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Optional. Authentication options for the search service."
+                      }
+                    },
+                    "networkRuleSet": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Optional. Network rule set for the search service."
+                      }
+                    },
                     "managedIdentityType": {
                       "type": "string",
                       "defaultValue": "SystemAssigned",
@@ -1344,7 +1407,9 @@
                         "hostingMode": "[parameters('hostingMode')]",
                         "semanticSearch": "[parameters('semanticSearch')]",
                         "disableLocalAuth": "[parameters('disableLocalAuth')]",
-                        "publicNetworkAccess": "[parameters('publicNetworkAccess')]"
+                        "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
+                        "authOptions": "[if(not(empty(parameters('authOptions'))), parameters('authOptions'), null())]",
+                        "networkRuleSet": "[if(not(empty(parameters('networkRuleSet'))), parameters('networkRuleSet'), null())]"
                       }
                     }
                   ],
@@ -1949,11 +2014,20 @@
           "location": {
             "value": "[parameters('location')]"
           },
+          "kind": {
+            "value": "app,linux,container"
+          },
           "serverFarmResourceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', take(format('module.app-service-plan.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
           },
           "linuxFxVersion": {
             "value": "[variables('backendApiImageName')]"
+          },
+          "healthCheckPath": {
+            "value": "/health"
+          },
+          "webSocketsEnabled": {
+            "value": true
           },
           "appSettings": {
             "value": {
@@ -2009,7 +2083,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "13974117254762023166"
+              "templateHash": "3612820651755035246"
             }
           },
           "parameters": {
@@ -2058,6 +2132,13 @@
                 "description": "Application settings key-value pairs."
               }
             },
+            "applicationInsightResourceId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Resource ID of Application Insights for monitoring integration."
+              }
+            },
             "alwaysOn": {
               "type": "bool",
               "defaultValue": true,
@@ -2065,18 +2146,46 @@
                 "description": "Whether to enable Always On."
               }
             },
-            "kind": {
-              "type": "string",
-              "defaultValue": "app,linux",
-              "metadata": {
-                "description": "Kind of web app."
-              }
-            },
-            "virtualNetworkSubnetId": {
+            "healthCheckPath": {
               "type": "string",
               "defaultValue": "",
               "metadata": {
-                "description": "Subnet resource ID for VNet integration."
+                "description": "Optional. Health check path for the app."
+              }
+            },
+            "webSocketsEnabled": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to enable WebSockets."
+              }
+            },
+            "appCommandLine": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Command line for the application."
+              }
+            },
+            "kind": {
+              "type": "string",
+              "defaultValue": "app,linux",
+              "allowedValues": [
+                "functionapp",
+                "functionapp,linux",
+                "functionapp,workflowapp",
+                "functionapp,workflowapp,linux",
+                "functionapp,linux,container",
+                "functionapp,linux,container,azurecontainerapps",
+                "app,linux",
+                "app",
+                "linux,api",
+                "api",
+                "app,linux,container",
+                "app,container,windows"
+              ],
+              "metadata": {
+                "description": "Required. Type of site to deploy."
               }
             },
             "publicNetworkAccess": {
@@ -2123,11 +2232,14 @@
               "properties": {
                 "serverFarmId": "[parameters('serverFarmResourceId')]",
                 "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
-                "virtualNetworkSubnetId": "[if(not(empty(parameters('virtualNetworkSubnetId'))), parameters('virtualNetworkSubnetId'), null())]",
                 "siteConfig": {
                   "alwaysOn": "[parameters('alwaysOn')]",
                   "ftpsState": "Disabled",
-                  "linuxFxVersion": "[parameters('linuxFxVersion')]"
+                  "linuxFxVersion": "[parameters('linuxFxVersion')]",
+                  "minTlsVersion": "1.2",
+                  "healthCheckPath": "[if(not(empty(parameters('healthCheckPath'))), parameters('healthCheckPath'), null())]",
+                  "webSocketsEnabled": "[parameters('webSocketsEnabled')]",
+                  "appCommandLine": "[parameters('appCommandLine')]"
                 },
                 "endToEndEncryptionEnabled": true
               }
@@ -2240,6 +2352,9 @@
           "location": {
             "value": "[parameters('location')]"
           },
+          "kind": {
+            "value": "app,linux,container"
+          },
           "serverFarmResourceId": {
             "value": "[reference(resourceId('Microsoft.Resources/deployments', take(format('module.app-service-plan.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
           },
@@ -2261,7 +2376,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "13974117254762023166"
+              "templateHash": "3612820651755035246"
             }
           },
           "parameters": {
@@ -2310,6 +2425,13 @@
                 "description": "Application settings key-value pairs."
               }
             },
+            "applicationInsightResourceId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Resource ID of Application Insights for monitoring integration."
+              }
+            },
             "alwaysOn": {
               "type": "bool",
               "defaultValue": true,
@@ -2317,18 +2439,46 @@
                 "description": "Whether to enable Always On."
               }
             },
-            "kind": {
-              "type": "string",
-              "defaultValue": "app,linux",
-              "metadata": {
-                "description": "Kind of web app."
-              }
-            },
-            "virtualNetworkSubnetId": {
+            "healthCheckPath": {
               "type": "string",
               "defaultValue": "",
               "metadata": {
-                "description": "Subnet resource ID for VNet integration."
+                "description": "Optional. Health check path for the app."
+              }
+            },
+            "webSocketsEnabled": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to enable WebSockets."
+              }
+            },
+            "appCommandLine": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Command line for the application."
+              }
+            },
+            "kind": {
+              "type": "string",
+              "defaultValue": "app,linux",
+              "allowedValues": [
+                "functionapp",
+                "functionapp,linux",
+                "functionapp,workflowapp",
+                "functionapp,workflowapp,linux",
+                "functionapp,linux,container",
+                "functionapp,linux,container,azurecontainerapps",
+                "app,linux",
+                "app",
+                "linux,api",
+                "api",
+                "app,linux,container",
+                "app,container,windows"
+              ],
+              "metadata": {
+                "description": "Required. Type of site to deploy."
               }
             },
             "publicNetworkAccess": {
@@ -2375,11 +2525,14 @@
               "properties": {
                 "serverFarmId": "[parameters('serverFarmResourceId')]",
                 "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
-                "virtualNetworkSubnetId": "[if(not(empty(parameters('virtualNetworkSubnetId'))), parameters('virtualNetworkSubnetId'), null())]",
                 "siteConfig": {
                   "alwaysOn": "[parameters('alwaysOn')]",
                   "ftpsState": "Disabled",
-                  "linuxFxVersion": "[parameters('linuxFxVersion')]"
+                  "linuxFxVersion": "[parameters('linuxFxVersion')]",
+                  "minTlsVersion": "1.2",
+                  "healthCheckPath": "[if(not(empty(parameters('healthCheckPath'))), parameters('healthCheckPath'), null())]",
+                  "webSocketsEnabled": "[parameters('webSocketsEnabled')]",
+                  "appCommandLine": "[parameters('appCommandLine')]"
                 },
                 "endToEndEncryptionEnabled": true
               }

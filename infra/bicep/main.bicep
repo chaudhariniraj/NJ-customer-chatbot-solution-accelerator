@@ -302,6 +302,15 @@ module ai_search './modules/ai/ai-search.bicep' = {
   params: {
     solutionName: solutionSuffix
     location: location
+    disableLocalAuth: false
+    authOptions: {
+      aadOrApiKey: {
+        aadAuthFailureMode: 'http401WithBearerChallenge'
+      }
+    }
+    networkRuleSet: {
+      bypass: 'AzureServices'
+    }
   }
   scope: resourceGroup(resourceGroup().name)
 }
@@ -377,8 +386,11 @@ module backend_docker './modules/compute/app-service.bicep' = {
     solutionName: solutionSuffix
     name: 'api-${solutionSuffix}'
     location: location
+    kind: 'app,linux,container'
     serverFarmResourceId: hostingplan.outputs.resourceId
     linuxFxVersion: backendApiImageName
+    healthCheckPath: '/health'
+    webSocketsEnabled: true
     appSettings: {
       AZURE_OPENAI_DEPLOYMENT_MODEL: gptModelName
       AZURE_OPENAI_ENDPOINT: aiFoundryEndpoint
@@ -433,6 +445,7 @@ module frontend_docker './modules/compute/app-service.bicep' = {
     solutionName: solutionSuffix
     name: 'app-${solutionSuffix}'
     location: location
+    kind: 'app,linux,container'
     serverFarmResourceId: hostingplan.outputs.resourceId
     linuxFxVersion: frontendImageName
     appSettings: {
