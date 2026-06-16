@@ -111,6 +111,15 @@ for REGION in "${REGIONS[@]}"; do
     echo "----------------------------------------"
     echo "🔍 Checking region: $REGION"
 
+    # Check if Search service provider is available in this region
+    echo "  📋 Checking Search service availability in $REGION..."
+    SEARCH_AVAILABLE=$(az search service list-skus --region "$REGION" -o json 2>/dev/null | grep -c '"name"' || echo "0")
+    if [[ "$SEARCH_AVAILABLE" -le 0 ]]; then
+        echo "  ⚠️ WARNING: Search service is not available in $REGION. Trying next region..."
+        continue
+    fi
+    echo "  ✅ Search service is available in $REGION"
+
     USAGE_COUNT=$(az cognitiveservices usage list --location "$REGION" --query 'length(@)' -o tsv 2>/dev/null || echo "0")
     if [[ -z "$USAGE_COUNT" || "$USAGE_COUNT" == "0" ]]; then
         echo "⚠️ WARNING: Failed to retrieve quota for region $REGION. Skipping."
