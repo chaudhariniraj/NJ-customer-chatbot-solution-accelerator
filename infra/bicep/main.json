@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "10347066064176130067"
+      "templateHash": "10682018068424782927"
     }
   },
   "parameters": {
@@ -314,7 +314,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "3041778378814011469"
+              "templateHash": "18362209914173142473"
             }
           },
           "parameters": {
@@ -361,10 +361,10 @@
             "identity": {
               "type": "object",
               "defaultValue": {
-                "systemAssigned": true
+                "type": "SystemAssigned"
               },
               "metadata": {
-                "description": "Optional. Managed identities for the resource."
+                "description": "Optional. Managed identity configuration for the resource."
               }
             }
           },
@@ -1885,7 +1885,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "1861089295090517865"
+              "templateHash": "8496143357348681814"
             }
           },
           "parameters": {
@@ -1973,10 +1973,10 @@
             "identity": {
               "type": "object",
               "defaultValue": {
-                "systemAssigned": true
+                "type": "SystemAssigned"
               },
               "metadata": {
-                "description": "Optional. Managed identities for the resource."
+                "description": "Optional. Managed identity configuration for the resource."
               }
             }
           },
