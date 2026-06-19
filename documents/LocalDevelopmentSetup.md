@@ -39,7 +39,19 @@ customer-chatbot-solution-accelerator/       ← Repository root (start here)
 │   ├── tests/                               ← Unit and integration tests
 │   ├── start-local.bat                      ← Windows startup script
 │   └── start-local.sh                       ← Linux/Mac startup script
-├── infra/                                   ← Azure infrastructure (Bicep)
+├── infra/                                   ← Azure infrastructure (modular Bicep)
+│   ├── avm/                                 ← Azure Verified Modules (production/WAF)
+│   │   ├── main.bicep                       ← AVM orchestrator template
+│   │   └── modules/                         ← AVM service modules (ai, compute, data, etc.)
+│   ├── bicep/                               ← Vanilla Bicep modules (dev/test)
+│   │   └── modules/                         ← Simplified service modules
+│   ├── scripts/                             ← Post-provision and utility scripts
+│   │   ├── post-provision/                  ← Data upload and agent creation scripts
+│   │   ├── pre-provision/                   ← Pre-deployment preparation scripts
+│   │   └── utilities/                       ← Helper scripts and utilities
+│   ├── main.bicep                           ← Main orchestrator (references avm or bicep modules)
+│   ├── main.parameters.json                 ← Default deployment configuration (bicep mode)
+│   └── main.waf.parameters.json             ← WAF deployment configuration (avm-waf mode)
 ├── documents/                               ← Documentation (you are here)
 ├── .vscode/                                 ← VS Code configuration
 └── azure.yaml                               ← Azure Developer CLI config
