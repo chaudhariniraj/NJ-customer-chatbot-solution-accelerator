@@ -50,6 +50,11 @@ on:
           - 'bicep'
           - 'avm'
           - 'avm-waf'
+      EXP:
+        description: 'Deploy EXP'
+        required: false
+        default: false
+        type: boolean
       build_docker_image:
         description: 'Build & Use Custom Images (Optional)'
         required: false
@@ -61,11 +66,7 @@ on:
         required: false
         default: true
         type: boolean
-      EXP:
-        description: 'Deploy EXP'
-        required: false
-        default: false
-        type: boolean
+      
       cleanup_resources:
         description: 'Auto Delete RG'
         required: false
