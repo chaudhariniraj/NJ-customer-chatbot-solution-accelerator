@@ -32,10 +32,10 @@ on:
       EXP:
         required: true
         type: string
-      WAF_ENABLED:
+      DEPLOYMENT_FLAVOR:
         required: false
         type: string
-        default: 'false'
+        default: 'bicep'
       ENABLE_SCALABILITY:
         required: false
         type: string
@@ -77,7 +77,7 @@ jobs:
           INPUT_IMAGE_TAG: ${{ inputs.IMAGE_TAG }}
           INPUT_BUILD_DOCKER_IMAGE: ${{ inputs.BUILD_DOCKER_IMAGE }}
           INPUT_EXP: ${{ inputs.EXP }}
-          INPUT_WAF_ENABLED: ${{ inputs.WAF_ENABLED }}
+          INPUT_DEPLOYMENT_FLAVOR: ${{ inputs.DEPLOYMENT_FLAVOR }}
           INPUT_AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ inputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
           INPUT_AZURE_EXISTING_AIPROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AIPROJECT_RESOURCE_ID }} 
         run: |
@@ -158,12 +158,12 @@ jobs:
             echo "✅ EXP: '$INPUT_EXP' is valid"
           fi
           
-          # Validate WAF_ENABLED (must be 'true' or 'false')
-          if [[ "$INPUT_WAF_ENABLED" != "true" && "$INPUT_WAF_ENABLED" != "false" ]]; then
-            echo "❌ ERROR: WAF_ENABLED must be 'true' or 'false', got: '$INPUT_WAF_ENABLED'"
+          # Validate DEPLOYMENT_FLAVOR (must be bicep | avm | avm-waf)
+          if [[ "$INPUT_DEPLOYMENT_FLAVOR" != "bicep" && "$INPUT_DEPLOYMENT_FLAVOR" != "avm" && "$INPUT_DEPLOYMENT_FLAVOR" != "avm-waf" ]]; then
+            echo "❌ ERROR: DEPLOYMENT_FLAVOR must be one of: bicep, avm, avm-waf, got: '$INPUT_DEPLOYMENT_FLAVOR'"
             VALIDATION_FAILED=true
           else
-            echo "✅ WAF_ENABLED: '$INPUT_WAF_ENABLED' is valid"
+            echo "✅ DEPLOYMENT_FLAVOR: '$INPUT_DEPLOYMENT_FLAVOR' is valid"
           fi
           
           # Validate AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID (optional, if provided must be valid Resource ID)
@@ -200,16 +200,17 @@ jobs:
           echo ""
           echo "✅ All input parameters validated successfully!"
       
-      - name: Configure Parameters Based on WAF Setting
+      - name: Configure Parameters Based on Deployment Flavour
         shell: bash
         env:
-          INPUT_WAF_ENABLED: ${{ inputs.WAF_ENABLED }}
+          INPUT_DEPLOYMENT_FLAVOR: ${{ inputs.DEPLOYMENT_FLAVOR }}
           INPUT_ENABLE_SCALABILITY: ${{ inputs.ENABLE_SCALABILITY }}
         run: |
           set -euo pipefail
-          if [[ "$INPUT_WAF_ENABLED" == "true" ]]; then
+          DEPLOYMENT_FLAVOR="${INPUT_DEPLOYMENT_FLAVOR:-bicep}"
+          if [[ "$DEPLOYMENT_FLAVOR" == "avm-waf" ]]; then
             cp infra/main.waf.parameters.json infra/main.parameters.json
-            echo "✅ Successfully copied WAF parameters to main parameters file"
+            echo "✅ Deployment flavour 'avm-waf' - copied WAF parameters to main parameters file"
             SCALABILITY_VALUE="${INPUT_ENABLE_SCALABILITY:-false}"
             if [[ "$SCALABILITY_VALUE" != "true" && "$SCALABILITY_VALUE" != "false" ]]; then
               echo "❌ ERROR: ENABLE_SCALABILITY must be 'true' or 'false', got: '$SCALABILITY_VALUE'"
@@ -225,7 +226,7 @@ jobs:
             mv "$tmpfile" infra/main.parameters.json
             echo "✅ enableScalability set to ${SCALABILITY_VALUE}"
           else
-            echo "🔧 Configuring Non-WAF deployment - using default main.parameters.json..."
+            echo "🔧 Deployment flavour '${DEPLOYMENT_FLAVOR}' - using default main.parameters.json (deploymentFlavor resolved from DEPLOYMENT_FLAVOR env var)..."
           fi
       
       - name: Login to Azure (OIDC)
@@ -257,6 +258,7 @@ jobs:
           INPUT_AZURE_NONAI_LOCATIONS: ${{ inputs.AZURE_NONAI_LOCATIONS }}
           INPUT_BUILD_DOCKER_IMAGE: ${{ inputs.BUILD_DOCKER_IMAGE }}
           INPUT_EXP: ${{ inputs.EXP }}
+          INPUT_DEPLOYMENT_FLAVOR: ${{ inputs.DEPLOYMENT_FLAVOR }}
           INPUT_AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ inputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
           INPUT_AZURE_EXISTING_AIPROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AIPROJECT_RESOURCE_ID }}
         run: |
@@ -276,6 +278,7 @@ jobs:
           azd env set AZURE_RESOURCE_GROUP="$INPUT_RESOURCE_GROUP_NAME"
           azd env set AZURE_ENV_IMAGETAG="$INPUT_IMAGE_TAG"
           azd env set AZURE_ENV_GPT_MODEL_CAPACITY="${INPUT_AZURE_ENV_GPT_MODEL_CAPACITY:-10}"
+          azd env set DEPLOYMENT_FLAVOR="${INPUT_DEPLOYMENT_FLAVOR:-bicep}"
           
           if [[ "$INPUT_BUILD_DOCKER_IMAGE" == "true" ]]; then
             ACR_NAME="${{ vars.ACR_TEST_LOGIN_SERVER }}"
@@ -450,10 +453,10 @@ jobs:
         shell: bash
         env:
           NETWORK_TOGGLE_ONLY: restore
-          # Tell the restore step what to restore to. For WAF the Bicep default
-          # is Disabled; for Non-WAF it's Enabled (restore becomes a no-op).
-          ORIGINAL_COSMOS_PUBLIC_ACCESS: ${{ inputs.WAF_ENABLED == 'true' && 'Disabled' || 'Enabled' }}
-          ORIGINAL_FOUNDRY_PUBLIC_ACCESS: ${{ inputs.WAF_ENABLED == 'true' && 'Disabled' || 'Enabled' }}
+          # Tell the restore step what to restore to. For avm-waf the Bicep default
+          # is Disabled; otherwise it's Enabled (restore becomes a no-op).
+          ORIGINAL_COSMOS_PUBLIC_ACCESS: ${{ inputs.DEPLOYMENT_FLAVOR == 'avm-waf' && 'Disabled' || 'Enabled' }}
+          ORIGINAL_FOUNDRY_PUBLIC_ACCESS: ${{ inputs.DEPLOYMENT_FLAVOR == 'avm-waf' && 'Disabled' || 'Enabled' }}
         run: |
           echo "🔒 Restoring original network access settings..."
           cd $GITHUB_WORKSPACE
@@ -467,7 +470,7 @@ jobs:
           echo "✅ Wait completed, data should now be available"
 
       - name: Wait for App Readiness (E2E Tests)
-        if: inputs.E2E_TEST == 'true' || (inputs.WAF_ENABLED == 'false' && inputs.EXP == 'false')
+        if: inputs.E2E_TEST == 'true' || (inputs.DEPLOYMENT_FLAVOR != 'avm-waf' && inputs.EXP == 'false')
         shell: bash
         run: |
           echo "⏳ E2E tests or Golden Path deployment - Waiting 10 minutes for app to be fully ready..."
@@ -475,7 +478,7 @@ jobs:
           echo "✅ App readiness wait completed"
 
       # - name: Restore Private Network Access (WAF Only)
-      #   if: always() && inputs.WAF_ENABLED == 'true'
+      #   if: always() && inputs.DEPLOYMENT_FLAVOR == 'avm-waf'
       #   shell: bash
       #   env:
       #     INPUT_RESOURCE_GROUP_NAME: ${{ inputs.RESOURCE_GROUP_NAME }}
@@ -539,9 +542,9 @@ jobs:
           INPUT_AZURE_LOCATION: ${{ inputs.AZURE_LOCATION }}
           INPUT_AZURE_ENV_AI_SERVICE_LOCATION: ${{ inputs.AZURE_ENV_AI_SERVICE_LOCATION }}
           INPUT_IMAGE_TAG: ${{ inputs.IMAGE_TAG }}
-          INPUT_WAF_ENABLED: ${{ inputs.WAF_ENABLED }}
+          INPUT_DEPLOYMENT_FLAVOR: ${{ inputs.DEPLOYMENT_FLAVOR }}
           INPUT_EXP: ${{ inputs.EXP }}
-          CONFIG_TYPE : ${{ inputs.WAF_ENABLED == 'true' && inputs.EXP == 'true' && 'WAF + EXP' || inputs.WAF_ENABLED == 'true' && inputs.EXP != 'true' && 'WAF + Non-EXP' || inputs.WAF_ENABLED != 'true' && inputs.EXP == 'true' && 'Non-WAF + EXP' || 'Non-WAF + Non-EXP' }}
+          CONFIG_TYPE : ${{ inputs.EXP == 'true' && format('{0} + EXP', inputs.DEPLOYMENT_FLAVOR) || format('{0} + Non-EXP', inputs.DEPLOYMENT_FLAVOR) }}
         run: |
           echo "## 🚀 Deploy Job Summary (Linux)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

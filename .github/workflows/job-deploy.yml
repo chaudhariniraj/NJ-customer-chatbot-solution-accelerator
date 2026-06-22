@@ -21,11 +21,11 @@ on:
         required: false
         default: ''
         type: string
-      waf_enabled:
-        description: 'Enable WAF'
+      deployment_flavor:
+        description: 'Deployment Flavour (bicep | avm | avm-waf)'
         required: false
-        default: false
-        type: boolean
+        default: 'bicep'
+        type: string
       enable_scalability:
         description: 'Enable Scalability (only used when WAF is enabled)'
         required: false
@@ -101,7 +101,7 @@ env:
   GPT_MIN_CAPACITY: ${{ vars.GPT_MIN_CAPACITY || 10 }}
   GPT_REALTIME_MIN_CAPACITY: ${{ vars.GPT_REALTIME_MIN_CAPACITY || 1 }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
-  WAF_ENABLED: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.waf_enabled || false) || false }}
+  DEPLOYMENT_FLAVOR: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.deployment_flavor || 'bicep') || 'bicep' }}
   EXP: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.EXP || false) || false }}
   CLEANUP_RESOURCES: ${{ inputs.trigger_type != 'workflow_dispatch' || inputs.cleanup_resources }}
   RUN_E2E_TESTS: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.run_e2e_tests || 'GoldenPath-Testing') || 'GoldenPath-Testing' }}
@@ -130,7 +130,7 @@ jobs:
           INPUT_AZURE_LOCATION: ${{ inputs.azure_location }}
           INPUT_RESOURCE_GROUP_NAME: ${{ inputs.resource_group_name }}
           INPUT_EXP: ${{ inputs.EXP }}
-          INPUT_WAF_ENABLED: ${{ inputs.waf_enabled }}
+          INPUT_DEPLOYMENT_FLAVOR: ${{ inputs.deployment_flavor }}
           INPUT_CLEANUP_RESOURCES: ${{ inputs.cleanup_resources }}
           INPUT_RUN_E2E_TESTS: ${{ inputs.run_e2e_tests }}
           INPUT_AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ inputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
@@ -163,12 +163,12 @@ jobs:
             fi
           fi
           
-          # Validate waf_enabled (boolean)
-          if [[ "$INPUT_WAF_ENABLED" != "true" && "$INPUT_WAF_ENABLED" != "false" ]]; then
-            echo "❌ ERROR: waf_enabled must be 'true' or 'false', got: '$INPUT_WAF_ENABLED'"
+          # Validate deployment_flavor (bicep | avm | avm-waf)
+          if [[ "$INPUT_DEPLOYMENT_FLAVOR" != "bicep" && "$INPUT_DEPLOYMENT_FLAVOR" != "avm" && "$INPUT_DEPLOYMENT_FLAVOR" != "avm-waf" ]]; then
+            echo "❌ ERROR: deployment_flavor must be one of: bicep, avm, avm-waf, got: '$INPUT_DEPLOYMENT_FLAVOR'"
             VALIDATION_FAILED=true
           else
-            echo "✅ waf_enabled: '$INPUT_WAF_ENABLED' is valid"
+            echo "✅ deployment_flavor: '$INPUT_DEPLOYMENT_FLAVOR' is valid"
           fi
           
           # Validate EXP (boolean)
@@ -340,9 +340,9 @@ jobs:
           AI_VALID_REGION: ${{ env.VALID_REGION }}
           AZURE_REGIONS_FALLBACK: ${{ vars.AZURE_REGIONS }}
         run: |
-          # Determine search tier based on WAF (scalability) setting
-          # WAF enabled → standard tier, WAF disabled → basic tier
-          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
+          # Determine search tier based on deployment flavour
+          # avm-waf → standard tier, otherwise → basic tier
+          if [[ "${{ env.DEPLOYMENT_FLAVOR }}" == "avm-waf" ]]; then
             SEARCH_TIER="standard"
             SEARCH_TIER_DISPLAY="Standard"
           else
@@ -542,10 +542,10 @@ jobs:
         id: search-subscription-quota
         shell: bash
         env:
-          WAF_ENABLED: ${{ env.WAF_ENABLED }}
+          DEPLOYMENT_FLAVOR: ${{ env.DEPLOYMENT_FLAVOR }}
         run: |
           set -euo pipefail
-          if [[ "$WAF_ENABLED" == "true" ]]; then
+          if [[ "$DEPLOYMENT_FLAVOR" == "avm-waf" ]]; then
             SEARCH_TIER="standard"
           else
             SEARCH_TIER="basic"
@@ -698,7 +698,7 @@ jobs:
           echo "| Configuration | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---------------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ env.BRANCH_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **WAF Enabled** | ${{ env.WAF_ENABLED == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployment Flavour** | \`${{ inputs.deployment_flavor || 'bicep' }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **EXP Enabled** | ${{ env.EXP == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Run E2E Tests** | \`${{ env.RUN_E2E_TESTS }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Cleanup Resources** | ${{ env.CLEANUP_RESOURCES == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
@@ -737,7 +737,7 @@ jobs:
       AZURE_NONAI_LOCATIONS: ${{ vars.AZURE_NONAI_LOCATIONS }}
       BUILD_DOCKER_IMAGE: ${{ inputs.build_docker_image || 'false' }}
       EXP: ${{ inputs.EXP || 'false' }}
-      WAF_ENABLED: ${{ inputs.waf_enabled == true && 'true' || 'false' }}
+      DEPLOYMENT_FLAVOR: ${{ inputs.deployment_flavor || 'bicep' }}
       ENABLE_SCALABILITY: ${{ inputs.enable_scalability == true && 'true' || 'false' }}
       AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ inputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
       AZURE_EXISTING_AIPROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AIPROJECT_RESOURCE_ID }}
@@ -758,7 +758,7 @@ jobs:
       AZURE_NONAI_LOCATIONS: ${{ vars.AZURE_NONAI_LOCATIONS }}
       BUILD_DOCKER_IMAGE: ${{ inputs.build_docker_image || 'false' }}
       EXP: ${{ inputs.EXP || 'false' }}
-      WAF_ENABLED: ${{ inputs.waf_enabled == true && 'true' || 'false' }}
+      DEPLOYMENT_FLAVOR: ${{ inputs.deployment_flavor || 'bicep' }}
       ENABLE_SCALABILITY: ${{ inputs.enable_scalability == true && 'true' || 'false' }}
       AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ inputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
       AZURE_EXISTING_AIPROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AIPROJECT_RESOURCE_ID }}
