@@ -39,7 +39,7 @@ on:
       ENABLE_SCALABILITY:
         required: false
         type: string
-        default: 'false'
+        default: 'true'
       AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID:
         required: false
         type: string
@@ -211,7 +211,7 @@ jobs:
           if [[ "$DEPLOYMENT_FLAVOR" == "avm-waf" ]]; then
             cp infra/main.waf.parameters.json infra/main.parameters.json
             echo "✅ Deployment flavour 'avm-waf' - copied WAF parameters to main parameters file"
-            SCALABILITY_VALUE="${INPUT_ENABLE_SCALABILITY:-false}"
+            SCALABILITY_VALUE="${INPUT_ENABLE_SCALABILITY:-true}"
             if [[ "$SCALABILITY_VALUE" != "true" && "$SCALABILITY_VALUE" != "false" ]]; then
               echo "❌ ERROR: ENABLE_SCALABILITY must be 'true' or 'false', got: '$SCALABILITY_VALUE'"
               exit 1

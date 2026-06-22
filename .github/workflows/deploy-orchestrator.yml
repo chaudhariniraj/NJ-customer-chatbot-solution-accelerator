@@ -25,7 +25,7 @@ on:
       enable_scalability:
         description: 'Enable Scalability (only used when WAF is enabled)'
         required: false
-        default: false
+        default: true
         type: boolean
       EXP:
         description: 'Enable EXP'

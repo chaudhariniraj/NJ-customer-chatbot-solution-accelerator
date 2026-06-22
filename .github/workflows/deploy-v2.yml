@@ -41,11 +41,6 @@ on:
         required: false
         default: ''
         type: string
-      build_docker_image:
-        description: 'Build & Use Custom Images (Optional)'
-        required: false
-        default: false
-        type: boolean
       deployment_flavor:
         description: 'Deployment Flavour'
         required: false
@@ -55,10 +50,16 @@ on:
           - 'bicep'
           - 'avm'
           - 'avm-waf'
+      build_docker_image:
+        description: 'Build & Use Custom Images (Optional)'
+        required: false
+        default: false
+        type: boolean
+      
       enable_scalability:
         description: 'Enable Scalability (avm-waf only)'
         required: false
-        default: false
+        default: true
         type: boolean
       EXP:
         description: 'Deploy EXP'
@@ -180,7 +181,7 @@ jobs:
           echo "✅ deployment_flavor: '$DEPLOYMENT_FLAVOR'"
           
           # Validate enable_scalability (boolean)
-          ENABLE_SCALABILITY="${INPUT_ENABLE_SCALABILITY:-false}"
+          ENABLE_SCALABILITY="${INPUT_ENABLE_SCALABILITY:-true}"
           if [[ "$ENABLE_SCALABILITY" != "true" && "$ENABLE_SCALABILITY" != "false" ]]; then
             echo "❌ ERROR: enable_scalability must be 'true' or 'false', got: '$ENABLE_SCALABILITY'"
             VALIDATION_FAILED=true
