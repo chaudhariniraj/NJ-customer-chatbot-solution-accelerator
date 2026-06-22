@@ -127,8 +127,11 @@ jobs:
           EXP: ${{ env.EXP }}
         run: |
           FLAVOR_LABEL="${DEPLOYMENT_FLAVOR:-bicep}"
-          EXP_LABEL=$( [ "$EXP" = "true" ] && echo "EXP" || echo "Non-EXP" )
-          echo "CONFIG_LABEL=${FLAVOR_LABEL} + ${EXP_LABEL}" >> $GITHUB_OUTPUT
+          if [ "$EXP" = "true" ]; then
+            echo "CONFIG_LABEL=${FLAVOR_LABEL} + EXP" >> $GITHUB_OUTPUT
+          else
+            echo "CONFIG_LABEL=${FLAVOR_LABEL}" >> $GITHUB_OUTPUT
+          fi
 
       # ------------------------------------------------------------------
       # Quota failure

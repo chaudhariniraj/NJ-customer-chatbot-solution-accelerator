@@ -763,3 +763,13 @@ jobs:
       AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID: ${{ inputs.AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID }}
       AZURE_EXISTING_AIPROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AIPROJECT_RESOURCE_ID }}
     secrets: inherit
+
+  post-deploy:
+    name: Post-Deployment Steps
+    needs: [azure-setup, deploy-linux, deploy-windows]
+    if: ${{ !cancelled() && (needs.deploy-linux.result == 'success' || needs.deploy-windows.result == 'success') }}
+    uses: ./.github/workflows/job-post-deploy.yml
+    with:
+      RESOURCE_GROUP_NAME: ${{ needs.azure-setup.outputs.RESOURCE_GROUP_NAME }}
+      DEPLOYMENT_FLAVOR: ${{ inputs.deployment_flavor || 'bicep' }}
+    secrets: inherit
