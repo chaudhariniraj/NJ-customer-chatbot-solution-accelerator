@@ -378,8 +378,8 @@ var scenarioFrontendImageName = 'DOCKER|${containerRegistryEndpoint}/${scenarioF
 
 var chatApiAppName = 'api-chat-${solutionSuffix}'
 var chatWebAppName = 'app-chat-${solutionSuffix}'
-var scenarioApiName = 'api-scenario-${solutionSuffix}'
-var scenarioAppName = 'app-scenario-${solutionSuffix}'
+var scenarioApiAppName = 'api-scenario-${solutionSuffix}'
+var scenarioWebAppName = 'app-scenario-${solutionSuffix}'
 
 var hostAppTitle = deploymentScenario == 'healthcare'
   ? 'Contoso Health'
@@ -453,6 +453,8 @@ module chat_backend_app './modules/compute/app-service.bicep' = {
     kind: 'app,linux,container'
     linuxFxVersion: chatbackendImageName
     serverFarmResourceId: hostingplan.outputs.resourceId
+    webSocketsEnabled: true
+    healthCheckPath: '/health'
     appSettings: {
       AZURE_OPENAI_DEPLOYMENT_MODEL: gptModelName
       AZURE_OPENAI_ENDPOINT: aiFoundryEndpoint
@@ -533,15 +535,15 @@ module chat_frontend_app './modules/compute/app-service.bicep' = {
 }
 
 
-module backend_docker './modules/compute/app-service.bicep' = {
+module scenario_backend_app './modules/compute/app-service.bicep' = {
   name: take('module.app-service-backend.${solutionName}', 64)
   params: {
     solutionName: solutionSuffix
-    name: 'api-${solutionSuffix}'
+    name: scenarioApiAppName
     location: location
     kind: 'app,linux,container'
     serverFarmResourceId: hostingplan.outputs.resourceId
-    linuxFxVersion: backendApiImageName
+    linuxFxVersion: scenarioBackendImageName
     healthCheckPath: '/health'
     webSocketsEnabled: true
     appSettings: {
@@ -552,31 +554,31 @@ module backend_docker './modules/compute/app-service.bicep' = {
       AZURE_AI_AGENT_ENDPOINT: projectEndpoint
       AZURE_AI_AGENT_API_VERSION: azureAiAgentApiVersion
       AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME: gptModelName
-      USE_CHAT_HISTORY_ENABLED: 'True'
+      USE_CHAT_HISTORY_ENABLED: 'False'
       AZURE_COSMOSDB_ACCOUNT: cosmosDBModule.outputs.name
+      AZURE_COSMOSDB_CONVERSATIONS_CONTAINER: cosmosDBModule.outputs.containerName
       AZURE_COSMOSDB_DATABASE: cosmosDBModule.outputs.databaseName
       AZURE_COSMOSDB_ENABLE_FEEDBACK: ''
-      REACT_APP_LAYOUT_CONFIG: reactAppLayoutConfig
       AZURE_AI_SEARCH_ENDPOINT: ai_search.outputs.endpoint
       AZURE_AI_SEARCH_INDEX: 'call_transcripts_index'
       AZURE_AI_SEARCH_CONNECTION_NAME: foundry_search_connection.outputs.connectionName
       USE_AI_PROJECT_CLIENT: 'True'
       DISPLAY_CHART_DEFAULT: 'False'
       APPLICATIONINSIGHTS_CONNECTION_STRING: enableMonitoring ? app_insights!.outputs.connectionString : ''
-      AZURE_BASIC_LOGGING_LEVEL: 'INFO'
-      AZURE_PACKAGE_LOGGING_LEVEL: 'WARNING'
-      AZURE_LOGGING_PACKAGES: ''
       DUMMY_TEST: 'True'
       SOLUTION_NAME: solutionSuffix
       APP_ENV: 'Prod'
-      ALLOWED_ORIGINS_STR: 'https://app-${solutionSuffix}.azurewebsites.net'
+      ALLOWED_ORIGINS_STR: 'https://${scenarioWebAppName}.azurewebsites.net'
       AZURE_FOUNDRY_ENDPOINT: projectEndpoint
       AZURE_SEARCH_ENDPOINT: ai_search.outputs.endpoint
       AZURE_SEARCH_INDEX: 'policies'
       AZURE_SEARCH_PRODUCT_INDEX: 'products'
       COSMOS_DB_DATABASE_NAME: cosmosDBModule.outputs.databaseName
-      COSMOS_DB_ENDPOINT: cosmosDBModule.outputs.endpoint
+      COSMOS_DB_ENDPOINT: 'https://${cosmosDBModule.outputs.name}.documents.azure.com:443/'
+      USE_FOUNDRY_AGENTS: 'False'
       AZURE_OPENAI_DEPLOYMENT_NAME: gptModelName
+      RATE_LIMIT_REQUESTS: 100
+      RATE_LIMIT_WINDOW: 60
       FOUNDRY_CHAT_AGENT: ''
       FOUNDRY_PRODUCT_AGENT: ''
       FOUNDRY_POLICY_AGENT: ''
@@ -587,24 +589,33 @@ module backend_docker './modules/compute/app-service.bicep' = {
       VOICELIVE_VAD_SILENCE_MS: '1200'
       VOICELIVE_VAD_THRESHOLD: '0.5'
       VOICELIVE_VAD_PREFIX_PADDING_MS: '300'
+      DEPLOYMENT_SCENARIO: deploymentScenario
+      APPINSIGHTS_INSTRUMENTATIONKEY: enableMonitoring ? app_insights!.outputs.instrumentationKey : ''
+      REACT_APP_LAYOUT_CONFIG: reactAppLayoutConfig
     }
   }
   scope: resourceGroup(resourceGroup().name)
 }
 
-module frontend_docker './modules/compute/app-service.bicep' = {
+module scenario_frontend_app './modules/compute/app-service.bicep' = {
   name: take('module.app-service-frontend.${solutionName}', 64)
   params: {
     solutionName: solutionSuffix
-    name: 'app-${solutionSuffix}'
+    name: scenarioWebAppName
     location: location
     kind: 'app,linux,container'
     serverFarmResourceId: hostingplan.outputs.resourceId
-    linuxFxVersion: frontendImageName
+    linuxFxVersion: scenarioFrontendImageName
     appSettings: {
       NODE_ENV: 'production'
-      VITE_API_BASE_URL: backend_docker.outputs.appUrl
+      VITE_API_BASE_URL: scenario_backend_app.outputs.appUrl
+      VITE_CHAT_API_BASE_URL: chat_backend_app.outputs.appUrl
       BACKEND_API_URL: ''
+      DEPLOYMENT_SCENARIO: deploymentScenario
+      VITE_SCENARIO: deploymentScenario
+      VITE_HOST_APP_TITLE: hostAppTitle
+      VITE_CHAT_WIDGET_THEME: chatWidgetTheme
+      APPINSIGHTS_INSTRUMENTATIONKEY: enableMonitoring ? app_insights!.outputs.instrumentationKey : ''
     }
   }
   scope: resourceGroup(resourceGroup().name)
@@ -626,7 +637,9 @@ module role_assignments './modules/identity/role-assignments.bicep' = {
     aiSearchPrincipalId: ai_search.outputs.identityPrincipalId
     deployerPrincipalId: deployingUserPrincipalId
     deployerPrincipalType: deployingUserPrincipalType
-    backendAppServicePrincipalId: backend_docker.outputs.identityPrincipalId
+    appServicePrincipalIds: {
+      chatBackendApp: chat_backend_app.outputs.identityPrincipalId
+    }
     cosmosDbAccountName: cosmosDBModule.outputs.name
   }
   scope: resourceGroup(resourceGroup().name)
@@ -726,17 +739,41 @@ output AZURE_ENV_IMAGETAG string = imageTag
 @description('Name of the Azure AI Services resource.')
 output AI_SERVICE_NAME string = aiFoundryName
 
-@description('Name of the backend API App Service.')
-output API_APP_NAME string = 'api-${solutionSuffix}'
+@description('Name of the chat backend API App Service.')
+output API_APP_NAME string = chat_backend_app.outputs.name
 
-@description('Principal ID of the backend system-assigned managed identity.')
-output API_PID string = backend_docker.outputs.identityPrincipalId
+@description('Principal ID of the chat backend system-assigned managed identity.')
+output API_PID string = chat_backend_app.outputs.identityPrincipalId
 
-@description('URL of the backend API application.')
-output API_APP_URL string = backend_docker.outputs.appUrl
+@description('API App Service URL.')
+output API_APP_URL string = chat_backend_app.outputs.appUrl
 
-@description('URL of the frontend web application.')
-output WEB_APP_URL string = frontend_docker.outputs.appUrl
+@description('Web App Service URL.')
+output WEB_APP_URL string = chat_frontend_app.outputs.appUrl
+
+@description('Chat API App Service URL.')
+output CHAT_API_APP_URL string = chat_backend_app.outputs.appUrl
+
+@description('Chat Web App Service URL.')
+output CHAT_WEB_APP_URL string = chat_frontend_app.outputs.appUrl
+
+@description('E-commerce API App Service URL.')
+output SCENARIO_API_APP_URL string = scenario_backend_app.outputs.appUrl
+
+@description('E-commerce Web App Service URL.')
+output SCENARIO_WEB_APP_URL string = scenario_frontend_app.outputs.appUrl
+
+@description('Chat API App Service Name.')
+output CHAT_API_APP_NAME string = chat_backend_app.outputs.name
+
+@description('Chat Web App Service Name.')
+output CHAT_WEB_APP_NAME string = chat_frontend_app.outputs.name
+
+@description('E-commerce API App Service Name.')
+output SCENARIO_API_APP_NAME string = scenario_backend_app.outputs.name
+
+@description('E-commerce Web App Service Name.')
+output SCENARIO_WEB_APP_NAME string = scenario_frontend_app.outputs.name
 
 @description('Application Insights connection string.')
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = enableMonitoring ? app_insights!.outputs.connectionString : ''

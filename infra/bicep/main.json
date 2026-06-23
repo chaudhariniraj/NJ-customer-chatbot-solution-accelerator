@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "10682018068424782927"
+      "templateHash": "11878166900599787618"
     }
   },
   "parameters": {
@@ -69,6 +70,18 @@
           ]
         },
         "description": "Required. Location for AI Foundry and model deployments."
+      }
+    },
+    "deploymentScenario": {
+      "type": "string",
+      "defaultValue": "ecommerce",
+      "allowedValues": [
+        "ecommerce",
+        "healthcare",
+        "banking"
+      ],
+      "metadata": {
+        "description": "Deployment scenario: ecommerce, healthcare, or banking"
       }
     },
     "deploymentType": {
@@ -275,12 +288,30 @@
       }
     ],
     "resourceTags": "[union(variables('existingTags'), parameters('tags'), createObject('TemplateName', 'Customer Chat bot', 'CreatedBy', variables('createdBy'), 'DeploymentName', deployment().name, 'Type', 'Non-WAF'))]",
-    "backendApiImageName": "[format('DOCKER|{0}/backend:{1}', parameters('containerRegistryEndpoint'), parameters('imageTag'))]",
-    "frontendImageName": "[format('DOCKER|{0}/frontend:{1}', parameters('containerRegistryEndpoint'), parameters('imageTag'))]",
-    "reactAppLayoutConfig": "{\n  \"appConfig\": {\n      \"CHAT_CHATHISTORY\": {\n        \"CHAT\": 70,\n        \"CHATHISTORY\": 30\n      }\n    }\n  }\n}"
+    "chatFrontendImageRepository": "chat-frontend",
+    "chatBackendImageRepository": "chat-backend",
+    "scenarioFrontendImageRepository": "scenario-frontend",
+    "scenarioBackendImageRepository": "scenario-backend",
+    "chatbackendImageName": "[format('DOCKER|{0}/{1}:{2}', parameters('containerRegistryEndpoint'), variables('chatBackendImageRepository'), parameters('imageTag'))]",
+    "chatfrontendImageName": "[format('DOCKER|{0}/{1}:{2}', parameters('containerRegistryEndpoint'), variables('chatFrontendImageRepository'), parameters('imageTag'))]",
+    "scenarioBackendImageName": "[format('DOCKER|{0}/{1}:{2}', parameters('containerRegistryEndpoint'), variables('scenarioBackendImageRepository'), parameters('imageTag'))]",
+    "scenarioFrontendImageName": "[format('DOCKER|{0}/{1}:{2}', parameters('containerRegistryEndpoint'), variables('scenarioFrontendImageRepository'), parameters('imageTag'))]",
+    "chatApiAppName": "[format('api-chat-{0}', variables('solutionSuffix'))]",
+    "chatWebAppName": "[format('app-chat-{0}', variables('solutionSuffix'))]",
+    "scenarioApiAppName": "[format('api-scenario-{0}', variables('solutionSuffix'))]",
+    "scenarioWebAppName": "[format('app-scenario-{0}', variables('solutionSuffix'))]",
+    "hostAppTitle": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'Contoso Health', if(equals(parameters('deploymentScenario'), 'banking'), 'Contoso Banking', 'Contoso'))]",
+    "chatWelcomeTitle": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'How can I help with your care today?', if(equals(parameters('deploymentScenario'), 'banking'), 'How can I help with your banking today?', 'Hey! I''m here to help.'))]",
+    "chatWelcomeSubtitle": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'Ask about appointments, departments, visiting hours, or billing questions.', if(equals(parameters('deploymentScenario'), 'banking'), 'Ask about accounts, transactions, fees, or digital banking support.', 'Ask me about returns & exchanges, warranties, or general product advice.'))]",
+    "chatWidgetTheme": "[if(equals(parameters('deploymentScenario'), 'ecommerce'), 'dark', 'light')]",
+    "catalogSearchIndex": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'services_index', if(equals(parameters('deploymentScenario'), 'banking'), 'accounts_index', 'products_index'))]",
+    "policiesSearchIndex": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'care_policies_index', if(equals(parameters('deploymentScenario'), 'banking'), 'banking_policies_index', 'policies_index'))]",
+    "catalogToolName": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'services_agent', if(equals(parameters('deploymentScenario'), 'banking'), 'accounts_agent', 'product_agent'))]",
+    "policyToolName": "[if(equals(parameters('deploymentScenario'), 'healthcare'), 'care_policy_agent', if(equals(parameters('deploymentScenario'), 'banking'), 'banking_policy_agent', 'policy_agent'))]",
+    "reactAppLayoutConfig": "{\r\n  \"appConfig\": {\r\n      \"CHAT_CHATHISTORY\": {\r\n        \"CHAT\": 70,\r\n        \"CHATHISTORY\": 30\r\n      }\r\n    }\r\n  }\r\n}"
   },
-  "resources": [
-    {
+  "resources": {
+    "resourceGroupTags": {
       "type": "Microsoft.Resources/tags",
       "apiVersion": "2025-04-01",
       "name": "default",
@@ -288,7 +319,7 @@
         "tags": "[variables('resourceTags')]"
       }
     },
-    {
+    "log_analytics": {
       "condition": "[and(parameters('enableMonitoring'), not(variables('useExistingLogAnalytics')))]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -417,7 +448,7 @@
         }
       }
     },
-    {
+    "app_insights": {
       "condition": "[parameters('enableMonitoring')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -435,7 +466,7 @@
           "location": {
             "value": "[parameters('location')]"
           },
-          "workspaceResourceId": "[if(parameters('enableMonitoring'), if(variables('useExistingLogAnalytics'), createObject('value', parameters('existingLogAnalyticsWorkspaceId')), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.log-analytics.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value)), createObject('value', ''))]"
+          "workspaceResourceId": "[if(parameters('enableMonitoring'), if(variables('useExistingLogAnalytics'), createObject('value', parameters('existingLogAnalyticsWorkspaceId')), createObject('value', reference('log_analytics').outputs.resourceId.value)), createObject('value', ''))]"
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -575,10 +606,10 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.log-analytics.{0}', parameters('solutionName')), 64))]"
+        "log_analytics"
       ]
     },
-    {
+    "ai_foundry_project": {
       "condition": "[not(variables('useExistingAIProject'))]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -802,7 +833,7 @@
         }
       }
     },
-    {
+    "existing_project_setup": {
       "condition": "[variables('useExistingAIProject')]",
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -922,7 +953,7 @@
         }
       }
     },
-    {
+    "model_deployments": {
       "copy": {
         "name": "model_deployments",
         "count": "[length(variables('aiModelDeployments'))]",
@@ -940,7 +971,7 @@
         },
         "mode": "Incremental",
         "parameters": {
-          "aiServicesAccountName": "[if(variables('useExistingAIProject'), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value))]",
+          "aiServicesAccountName": "[if(variables('useExistingAIProject'), createObject('value', reference('existing_project_setup').outputs.name.value), createObject('value', reference('ai_foundry_project').outputs.name.value))]",
           "deploymentName": {
             "value": "[variables('aiModelDeployments')[copyIndex()].name]"
           },
@@ -1061,11 +1092,11 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64))]"
+        "ai_foundry_project",
+        "existing_project_setup"
       ]
     },
-    {
+    "ai_search": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.ai-search.{0}', parameters('solutionName')), 64)]",
@@ -1466,7 +1497,7 @@
         }
       }
     },
-    {
+    "foundry_search_connection": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.foundry-search-conn.{0}', parameters('solutionName')), 64)]",
@@ -1481,8 +1512,8 @@
           "solutionName": {
             "value": "[variables('solutionSuffix')]"
           },
-          "aiServicesAccountName": "[if(variables('useExistingAIProject'), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value))]",
-          "projectName": "[if(variables('useExistingAIProject'), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectName.value), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectName.value))]",
+          "aiServicesAccountName": "[if(variables('useExistingAIProject'), createObject('value', reference('existing_project_setup').outputs.name.value), createObject('value', reference('ai_foundry_project').outputs.name.value))]",
+          "projectName": "[if(variables('useExistingAIProject'), createObject('value', reference('existing_project_setup').outputs.projectName.value), createObject('value', reference('ai_foundry_project').outputs.projectName.value))]",
           "connectionName": {
             "value": "[format('aifp-srch-connection-{0}', variables('solutionSuffix'))]"
           },
@@ -1490,7 +1521,7 @@
             "value": "CognitiveSearch"
           },
           "target": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value]"
+            "value": "[reference('ai_search').outputs.endpoint.value]"
           },
           "authType": {
             "value": "AAD"
@@ -1498,7 +1529,7 @@
           "metadata": {
             "value": {
               "ApiType": "Azure",
-              "ResourceId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
+              "ResourceId": "[reference('ai_search').outputs.resourceId.value]"
             }
           }
         },
@@ -1631,12 +1662,12 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64))]"
+        "ai_foundry_project",
+        "ai_search",
+        "existing_project_setup"
       ]
     },
-    {
+    "cosmosDBModule": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)]",
@@ -1858,7 +1889,7 @@
         }
       }
     },
-    {
+    "hostingplan": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.app-service-plan.{0}', parameters('solutionName')), 64)]",
@@ -2018,7 +2049,663 @@
         }
       }
     },
-    {
+    "chat_backend_app": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[take(format('module.app-service-chat-backend.{0}', parameters('solutionName')), 64)]",
+      "resourceGroup": "[resourceGroup().name]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "solutionName": {
+            "value": "[variables('solutionSuffix')]"
+          },
+          "name": {
+            "value": "[variables('chatApiAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "kind": {
+            "value": "app,linux,container"
+          },
+          "linuxFxVersion": {
+            "value": "[variables('chatbackendImageName')]"
+          },
+          "serverFarmResourceId": {
+            "value": "[reference('hostingplan').outputs.resourceId.value]"
+          },
+          "webSocketsEnabled": {
+            "value": true
+          },
+          "healthCheckPath": {
+            "value": "/health"
+          },
+          "appSettings": {
+            "value": {
+              "AZURE_OPENAI_DEPLOYMENT_MODEL": "[parameters('gptModelName')]",
+              "AZURE_OPENAI_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.endpoint.value, reference('ai_foundry_project').outputs.endpoint.value)]",
+              "AZURE_OPENAI_API_VERSION": "[parameters('azureOpenaiAPIVersion')]",
+              "AZURE_OPENAI_RESOURCE": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.name.value, reference('ai_foundry_project').outputs.name.value)]",
+              "AZURE_AI_AGENT_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]",
+              "AZURE_AI_AGENT_API_VERSION": "[parameters('azureAiAgentApiVersion')]",
+              "AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME": "[parameters('gptModelName')]",
+              "USE_CHAT_HISTORY_ENABLED": "True",
+              "AZURE_COSMOSDB_ACCOUNT": "[reference('cosmosDBModule').outputs.name.value]",
+              "AZURE_COSMOSDB_CONVERSATIONS_CONTAINER": "[reference('cosmosDBModule').outputs.containerName.value]",
+              "AZURE_COSMOSDB_DATABASE": "[reference('cosmosDBModule').outputs.databaseName.value]",
+              "AZURE_COSMOSDB_ENABLE_FEEDBACK": "",
+              "AZURE_AI_SEARCH_ENDPOINT": "[reference('ai_search').outputs.endpoint.value]",
+              "AZURE_AI_SEARCH_INDEX": "call_transcripts_index",
+              "AZURE_AI_SEARCH_CONNECTION_NAME": "[reference('foundry_search_connection').outputs.connectionName.value]",
+              "USE_AI_PROJECT_CLIENT": "True",
+              "DISPLAY_CHART_DEFAULT": "False",
+              "APPLICATIONINSIGHTS_CONNECTION_STRING": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.connectionString.value, '')]",
+              "DUMMY_TEST": "True",
+              "SOLUTION_NAME": "[variables('solutionSuffix')]",
+              "APP_ENV": "Prod",
+              "ALLOWED_ORIGINS_STR": "[format('https://{0}.azurewebsites.net,https://{1}.azurewebsites.net', variables('chatWebAppName'), variables('scenarioWebAppName'))]",
+              "AZURE_FOUNDRY_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]",
+              "AZURE_SEARCH_ENDPOINT": "[reference('ai_search').outputs.endpoint.value]",
+              "AZURE_SEARCH_INDEX": "policies",
+              "AZURE_SEARCH_PRODUCT_INDEX": "products",
+              "COSMOS_DB_DATABASE_NAME": "[reference('cosmosDBModule').outputs.databaseName.value]",
+              "COSMOS_DB_ENDPOINT": "[format('https://{0}.documents.azure.com:443/', reference('cosmosDBModule').outputs.name.value)]",
+              "USE_FOUNDRY_AGENTS": "True",
+              "AZURE_OPENAI_DEPLOYMENT_NAME": "[parameters('gptModelName')]",
+              "RATE_LIMIT_REQUESTS": 100,
+              "RATE_LIMIT_WINDOW": 60,
+              "FOUNDRY_CHAT_AGENT": "",
+              "FOUNDRY_PRODUCT_AGENT": "",
+              "FOUNDRY_POLICY_AGENT": "",
+              "AZURE_VOICELIVE_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.endpoint.value, reference('ai_foundry_project').outputs.endpoint.value)]",
+              "VOICELIVE_MODEL": "gpt-realtime-mini",
+              "VOICELIVE_VOICE": "alloy",
+              "VOICELIVE_TRANSCRIBE_MODEL": "gpt-4o-transcribe",
+              "VOICELIVE_VAD_SILENCE_MS": "1200",
+              "VOICELIVE_VAD_THRESHOLD": "0.5",
+              "VOICELIVE_VAD_PREFIX_PADDING_MS": "300",
+              "DEPLOYMENT_SCENARIO": "[parameters('deploymentScenario')]",
+              "CHAT_WELCOME_TITLE": "[variables('chatWelcomeTitle')]",
+              "CHAT_WELCOME_SUBTITLE": "[variables('chatWelcomeSubtitle')]",
+              "AZURE_SEARCH_CATALOG_INDEX": "[variables('catalogSearchIndex')]",
+              "AZURE_SEARCH_POLICIES_INDEX": "[variables('policiesSearchIndex')]",
+              "FOUNDRY_CATALOG_TOOL_NAME": "[variables('catalogToolName')]",
+              "FOUNDRY_POLICY_TOOL_NAME": "[variables('policyToolName')]",
+              "APPINSIGHTS_INSTRUMENTATIONKEY": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.instrumentationKey.value, '')]",
+              "REACT_APP_LAYOUT_CONFIG": "[variables('reactAppLayoutConfig')]"
+            }
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "15104078240780944367"
+            }
+          },
+          "parameters": {
+            "solutionName": {
+              "type": "string",
+              "metadata": {
+                "description": "Solution name suffix used to derive the resource name."
+              }
+            },
+            "name": {
+              "type": "string",
+              "defaultValue": "[parameters('solutionName')]",
+              "metadata": {
+                "description": "Name of the App Service."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the resource."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to the resource."
+              }
+            },
+            "serverFarmResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the App Service Plan."
+              }
+            },
+            "linuxFxVersion": {
+              "type": "string",
+              "metadata": {
+                "description": "Docker image name (e.g., DOCKER|registry.azurecr.io/image:tag)."
+              }
+            },
+            "appSettings": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Application settings key-value pairs."
+              }
+            },
+            "alwaysOn": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Whether to enable Always On."
+              }
+            },
+            "healthCheckPath": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Health check path for the app."
+              }
+            },
+            "webSocketsEnabled": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to enable WebSockets."
+              }
+            },
+            "appCommandLine": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Command line for the application."
+              }
+            },
+            "kind": {
+              "type": "string",
+              "defaultValue": "app,linux",
+              "allowedValues": [
+                "functionapp",
+                "functionapp,linux",
+                "functionapp,workflowapp",
+                "functionapp,workflowapp,linux",
+                "functionapp,linux,container",
+                "functionapp,linux,container,azurecontainerapps",
+                "app,linux",
+                "app",
+                "linux,api",
+                "api",
+                "app,linux,container",
+                "app,container,windows"
+              ],
+              "metadata": {
+                "description": "Required. Type of site to deploy."
+              }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "Enabled",
+              "metadata": {
+                "description": "Public network access setting."
+              }
+            },
+            "identity": {
+              "type": "object",
+              "defaultValue": {
+                "type": "SystemAssigned"
+              },
+              "metadata": {
+                "description": "Optional. Managed identity configuration for the resource."
+              }
+            },
+            "acrUseManagedIdentityCreds": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to use managed identity credentials for ACR authentication."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'ftp')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'scm')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2025-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "[parameters('kind')]",
+              "identity": "[parameters('identity')]",
+              "properties": {
+                "serverFarmId": "[parameters('serverFarmResourceId')]",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
+                "siteConfig": {
+                  "alwaysOn": "[parameters('alwaysOn')]",
+                  "ftpsState": "Disabled",
+                  "linuxFxVersion": "[parameters('linuxFxVersion')]",
+                  "minTlsVersion": "1.2",
+                  "healthCheckPath": "[if(not(empty(parameters('healthCheckPath'))), parameters('healthCheckPath'), null())]",
+                  "webSocketsEnabled": "[parameters('webSocketsEnabled')]",
+                  "appCommandLine": "[parameters('appCommandLine')]",
+                  "acrUseManagedIdentityCreds": "[parameters('acrUseManagedIdentityCreds')]"
+                },
+                "endToEndEncryptionEnabled": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'appsettings')]",
+              "properties": "[parameters('appSettings')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'logs')]",
+              "properties": {
+                "applicationLogs": {
+                  "fileSystem": {
+                    "level": "Verbose"
+                  }
+                },
+                "detailedErrorMessages": {
+                  "enabled": true
+                },
+                "failedRequestsTracing": {
+                  "enabled": true
+                },
+                "httpLogs": {
+                  "fileSystem": {
+                    "enabled": true,
+                    "retentionInDays": 1,
+                    "retentionInMb": 35
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]",
+                "[resourceId('Microsoft.Web/sites/config', parameters('name'), 'appsettings')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "resourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the App Service."
+              },
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the App Service."
+              },
+              "value": "[parameters('name')]"
+            },
+            "defaultHostname": {
+              "type": "string",
+              "metadata": {
+                "description": "Default hostname of the App Service."
+              },
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2025-05-01').defaultHostName]"
+            },
+            "appUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "URL of the App Service."
+              },
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('name')), '2025-05-01').defaultHostName)]"
+            },
+            "identityPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "System-assigned identity principal ID."
+              },
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2025-05-01', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "ai_foundry_project",
+        "ai_search",
+        "app_insights",
+        "cosmosDBModule",
+        "existing_project_setup",
+        "foundry_search_connection",
+        "hostingplan"
+      ]
+    },
+    "chat_frontend_app": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[take(format('module.app-service-chat-frontend.{0}', parameters('solutionName')), 64)]",
+      "resourceGroup": "[resourceGroup().name]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "solutionName": {
+            "value": "[variables('solutionSuffix')]"
+          },
+          "name": {
+            "value": "[variables('chatWebAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "kind": {
+            "value": "app,linux,container"
+          },
+          "linuxFxVersion": {
+            "value": "[variables('chatfrontendImageName')]"
+          },
+          "serverFarmResourceId": {
+            "value": "[reference('hostingplan').outputs.resourceId.value]"
+          },
+          "appSettings": {
+            "value": {
+              "NODE_ENV": "production",
+              "VITE_API_BASE_URL": "[reference('chat_backend_app').outputs.appUrl.value]",
+              "DEPLOYMENT_SCENARIO": "[parameters('deploymentScenario')]",
+              "VITE_SCENARIO": "[parameters('deploymentScenario')]",
+              "CHAT_WELCOME_TITLE": "[variables('chatWelcomeTitle')]",
+              "CHAT_WELCOME_SUBTITLE": "[variables('chatWelcomeSubtitle')]",
+              "APPINSIGHTS_INSTRUMENTATIONKEY": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.instrumentationKey.value, '')]"
+            }
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "15104078240780944367"
+            }
+          },
+          "parameters": {
+            "solutionName": {
+              "type": "string",
+              "metadata": {
+                "description": "Solution name suffix used to derive the resource name."
+              }
+            },
+            "name": {
+              "type": "string",
+              "defaultValue": "[parameters('solutionName')]",
+              "metadata": {
+                "description": "Name of the App Service."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the resource."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Tags to apply to the resource."
+              }
+            },
+            "serverFarmResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the App Service Plan."
+              }
+            },
+            "linuxFxVersion": {
+              "type": "string",
+              "metadata": {
+                "description": "Docker image name (e.g., DOCKER|registry.azurecr.io/image:tag)."
+              }
+            },
+            "appSettings": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Application settings key-value pairs."
+              }
+            },
+            "alwaysOn": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Whether to enable Always On."
+              }
+            },
+            "healthCheckPath": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Health check path for the app."
+              }
+            },
+            "webSocketsEnabled": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to enable WebSockets."
+              }
+            },
+            "appCommandLine": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Command line for the application."
+              }
+            },
+            "kind": {
+              "type": "string",
+              "defaultValue": "app,linux",
+              "allowedValues": [
+                "functionapp",
+                "functionapp,linux",
+                "functionapp,workflowapp",
+                "functionapp,workflowapp,linux",
+                "functionapp,linux,container",
+                "functionapp,linux,container,azurecontainerapps",
+                "app,linux",
+                "app",
+                "linux,api",
+                "api",
+                "app,linux,container",
+                "app,container,windows"
+              ],
+              "metadata": {
+                "description": "Required. Type of site to deploy."
+              }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "Enabled",
+              "metadata": {
+                "description": "Public network access setting."
+              }
+            },
+            "identity": {
+              "type": "object",
+              "defaultValue": {
+                "type": "SystemAssigned"
+              },
+              "metadata": {
+                "description": "Optional. Managed identity configuration for the resource."
+              }
+            },
+            "acrUseManagedIdentityCreds": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to use managed identity credentials for ACR authentication."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'ftp')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'scm')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2025-05-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "[parameters('kind')]",
+              "identity": "[parameters('identity')]",
+              "properties": {
+                "serverFarmId": "[parameters('serverFarmResourceId')]",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
+                "siteConfig": {
+                  "alwaysOn": "[parameters('alwaysOn')]",
+                  "ftpsState": "Disabled",
+                  "linuxFxVersion": "[parameters('linuxFxVersion')]",
+                  "minTlsVersion": "1.2",
+                  "healthCheckPath": "[if(not(empty(parameters('healthCheckPath'))), parameters('healthCheckPath'), null())]",
+                  "webSocketsEnabled": "[parameters('webSocketsEnabled')]",
+                  "appCommandLine": "[parameters('appCommandLine')]",
+                  "acrUseManagedIdentityCreds": "[parameters('acrUseManagedIdentityCreds')]"
+                },
+                "endToEndEncryptionEnabled": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'appsettings')]",
+              "properties": "[parameters('appSettings')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'logs')]",
+              "properties": {
+                "applicationLogs": {
+                  "fileSystem": {
+                    "level": "Verbose"
+                  }
+                },
+                "detailedErrorMessages": {
+                  "enabled": true
+                },
+                "failedRequestsTracing": {
+                  "enabled": true
+                },
+                "httpLogs": {
+                  "fileSystem": {
+                    "enabled": true,
+                    "retentionInDays": 1,
+                    "retentionInMb": 35
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]",
+                "[resourceId('Microsoft.Web/sites/config', parameters('name'), 'appsettings')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "resourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the App Service."
+              },
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the App Service."
+              },
+              "value": "[parameters('name')]"
+            },
+            "defaultHostname": {
+              "type": "string",
+              "metadata": {
+                "description": "Default hostname of the App Service."
+              },
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2025-05-01').defaultHostName]"
+            },
+            "appUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "URL of the App Service."
+              },
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('name')), '2025-05-01').defaultHostName)]"
+            },
+            "identityPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "System-assigned identity principal ID."
+              },
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2025-05-01', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "app_insights",
+        "chat_backend_app",
+        "hostingplan"
+      ]
+    },
+    "scenario_backend_app": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.app-service-backend.{0}', parameters('solutionName')), 64)]",
@@ -2033,7 +2720,7 @@
             "value": "[variables('solutionSuffix')]"
           },
           "name": {
-            "value": "[format('api-{0}', variables('solutionSuffix'))]"
+            "value": "[variables('scenarioApiAppName')]"
           },
           "location": {
             "value": "[parameters('location')]"
@@ -2042,10 +2729,10 @@
             "value": "app,linux,container"
           },
           "serverFarmResourceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', take(format('module.app-service-plan.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
+            "value": "[reference('hostingplan').outputs.resourceId.value]"
           },
           "linuxFxVersion": {
-            "value": "[variables('backendApiImageName')]"
+            "value": "[variables('scenarioBackendImageName')]"
           },
           "healthCheckPath": {
             "value": "/health"
@@ -2056,47 +2743,50 @@
           "appSettings": {
             "value": {
               "AZURE_OPENAI_DEPLOYMENT_MODEL": "[parameters('gptModelName')]",
-              "AZURE_OPENAI_ENDPOINT": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value)]",
+              "AZURE_OPENAI_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.endpoint.value, reference('ai_foundry_project').outputs.endpoint.value)]",
               "AZURE_OPENAI_API_VERSION": "[parameters('azureOpenaiAPIVersion')]",
-              "AZURE_OPENAI_RESOURCE": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value)]",
-              "AZURE_AI_AGENT_ENDPOINT": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value)]",
+              "AZURE_OPENAI_RESOURCE": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.name.value, reference('ai_foundry_project').outputs.name.value)]",
+              "AZURE_AI_AGENT_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]",
               "AZURE_AI_AGENT_API_VERSION": "[parameters('azureAiAgentApiVersion')]",
               "AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME": "[parameters('gptModelName')]",
-              "USE_CHAT_HISTORY_ENABLED": "True",
-              "AZURE_COSMOSDB_ACCOUNT": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value]",
-              "AZURE_COSMOSDB_DATABASE": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.databaseName.value]",
+              "USE_CHAT_HISTORY_ENABLED": "False",
+              "AZURE_COSMOSDB_ACCOUNT": "[reference('cosmosDBModule').outputs.name.value]",
+              "AZURE_COSMOSDB_CONVERSATIONS_CONTAINER": "[reference('cosmosDBModule').outputs.containerName.value]",
+              "AZURE_COSMOSDB_DATABASE": "[reference('cosmosDBModule').outputs.databaseName.value]",
               "AZURE_COSMOSDB_ENABLE_FEEDBACK": "",
-              "REACT_APP_LAYOUT_CONFIG": "[variables('reactAppLayoutConfig')]",
-              "AZURE_AI_SEARCH_ENDPOINT": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value]",
+              "AZURE_AI_SEARCH_ENDPOINT": "[reference('ai_search').outputs.endpoint.value]",
               "AZURE_AI_SEARCH_INDEX": "call_transcripts_index",
-              "AZURE_AI_SEARCH_CONNECTION_NAME": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.foundry-search-conn.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.connectionName.value]",
+              "AZURE_AI_SEARCH_CONNECTION_NAME": "[reference('foundry_search_connection').outputs.connectionName.value]",
               "USE_AI_PROJECT_CLIENT": "True",
               "DISPLAY_CHART_DEFAULT": "False",
-              "APPLICATIONINSIGHTS_CONNECTION_STRING": "[if(parameters('enableMonitoring'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-insights.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.connectionString.value, '')]",
-              "AZURE_BASIC_LOGGING_LEVEL": "INFO",
-              "AZURE_PACKAGE_LOGGING_LEVEL": "WARNING",
-              "AZURE_LOGGING_PACKAGES": "",
+              "APPLICATIONINSIGHTS_CONNECTION_STRING": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.connectionString.value, '')]",
               "DUMMY_TEST": "True",
               "SOLUTION_NAME": "[variables('solutionSuffix')]",
               "APP_ENV": "Prod",
-              "ALLOWED_ORIGINS_STR": "[format('https://app-{0}.azurewebsites.net', variables('solutionSuffix'))]",
-              "AZURE_FOUNDRY_ENDPOINT": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value)]",
-              "AZURE_SEARCH_ENDPOINT": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value]",
+              "ALLOWED_ORIGINS_STR": "[format('https://{0}.azurewebsites.net', variables('scenarioWebAppName'))]",
+              "AZURE_FOUNDRY_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]",
+              "AZURE_SEARCH_ENDPOINT": "[reference('ai_search').outputs.endpoint.value]",
               "AZURE_SEARCH_INDEX": "policies",
               "AZURE_SEARCH_PRODUCT_INDEX": "products",
-              "COSMOS_DB_DATABASE_NAME": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.databaseName.value]",
-              "COSMOS_DB_ENDPOINT": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value]",
+              "COSMOS_DB_DATABASE_NAME": "[reference('cosmosDBModule').outputs.databaseName.value]",
+              "COSMOS_DB_ENDPOINT": "[format('https://{0}.documents.azure.com:443/', reference('cosmosDBModule').outputs.name.value)]",
+              "USE_FOUNDRY_AGENTS": "False",
               "AZURE_OPENAI_DEPLOYMENT_NAME": "[parameters('gptModelName')]",
+              "RATE_LIMIT_REQUESTS": 100,
+              "RATE_LIMIT_WINDOW": 60,
               "FOUNDRY_CHAT_AGENT": "",
               "FOUNDRY_PRODUCT_AGENT": "",
               "FOUNDRY_POLICY_AGENT": "",
-              "AZURE_VOICELIVE_ENDPOINT": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value)]",
+              "AZURE_VOICELIVE_ENDPOINT": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.endpoint.value, reference('ai_foundry_project').outputs.endpoint.value)]",
               "VOICELIVE_MODEL": "[parameters('gptRealtimeModelName')]",
               "VOICELIVE_VOICE": "alloy",
               "VOICELIVE_TRANSCRIBE_MODEL": "gpt-4o-transcribe",
               "VOICELIVE_VAD_SILENCE_MS": "1200",
               "VOICELIVE_VAD_THRESHOLD": "0.5",
-              "VOICELIVE_VAD_PREFIX_PADDING_MS": "300"
+              "VOICELIVE_VAD_PREFIX_PADDING_MS": "300",
+              "DEPLOYMENT_SCENARIO": "[parameters('deploymentScenario')]",
+              "APPINSIGHTS_INSTRUMENTATIONKEY": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.instrumentationKey.value, '')]",
+              "REACT_APP_LAYOUT_CONFIG": "[variables('reactAppLayoutConfig')]"
             }
           }
         },
@@ -2107,7 +2797,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "9185565370457912659"
+              "templateHash": "15104078240780944367"
             }
           },
           "parameters": {
@@ -2220,6 +2910,13 @@
               "metadata": {
                 "description": "Optional. Managed identity configuration for the resource."
               }
+            },
+            "acrUseManagedIdentityCreds": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to use managed identity credentials for ACR authentication."
+              }
             }
           },
           "resources": [
@@ -2263,7 +2960,8 @@
                   "minTlsVersion": "1.2",
                   "healthCheckPath": "[if(not(empty(parameters('healthCheckPath'))), parameters('healthCheckPath'), null())]",
                   "webSocketsEnabled": "[parameters('webSocketsEnabled')]",
-                  "appCommandLine": "[parameters('appCommandLine')]"
+                  "appCommandLine": "[parameters('appCommandLine')]",
+                  "acrUseManagedIdentityCreds": "[parameters('acrUseManagedIdentityCreds')]"
                 },
                 "endToEndEncryptionEnabled": true
               }
@@ -2347,16 +3045,16 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-insights.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.foundry-search-conn.{0}', parameters('solutionName')), 64))]",
-        "[resourceId('Microsoft.Resources/deployments', take(format('module.app-service-plan.{0}', parameters('solutionName')), 64))]"
+        "ai_foundry_project",
+        "ai_search",
+        "app_insights",
+        "cosmosDBModule",
+        "existing_project_setup",
+        "foundry_search_connection",
+        "hostingplan"
       ]
     },
-    {
+    "scenario_frontend_app": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.app-service-frontend.{0}', parameters('solutionName')), 64)]",
@@ -2371,7 +3069,7 @@
             "value": "[variables('solutionSuffix')]"
           },
           "name": {
-            "value": "[format('app-{0}', variables('solutionSuffix'))]"
+            "value": "[variables('scenarioWebAppName')]"
           },
           "location": {
             "value": "[parameters('location')]"
@@ -2380,16 +3078,22 @@
             "value": "app,linux,container"
           },
           "serverFarmResourceId": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', take(format('module.app-service-plan.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
+            "value": "[reference('hostingplan').outputs.resourceId.value]"
           },
           "linuxFxVersion": {
-            "value": "[variables('frontendImageName')]"
+            "value": "[variables('scenarioFrontendImageName')]"
           },
           "appSettings": {
             "value": {
               "NODE_ENV": "production",
-              "VITE_API_BASE_URL": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-backend.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.appUrl.value]",
-              "BACKEND_API_URL": ""
+              "VITE_API_BASE_URL": "[reference('scenario_backend_app').outputs.appUrl.value]",
+              "VITE_CHAT_API_BASE_URL": "[reference('chat_backend_app').outputs.appUrl.value]",
+              "BACKEND_API_URL": "",
+              "DEPLOYMENT_SCENARIO": "[parameters('deploymentScenario')]",
+              "VITE_SCENARIO": "[parameters('deploymentScenario')]",
+              "VITE_HOST_APP_TITLE": "[variables('hostAppTitle')]",
+              "VITE_CHAT_WIDGET_THEME": "[variables('chatWidgetTheme')]",
+              "APPINSIGHTS_INSTRUMENTATIONKEY": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.instrumentationKey.value, '')]"
             }
           }
         },
@@ -2400,7 +3104,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "9185565370457912659"
+              "templateHash": "15104078240780944367"
             }
           },
           "parameters": {
@@ -2513,6 +3217,13 @@
               "metadata": {
                 "description": "Optional. Managed identity configuration for the resource."
               }
+            },
+            "acrUseManagedIdentityCreds": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Whether to use managed identity credentials for ACR authentication."
+              }
             }
           },
           "resources": [
@@ -2556,7 +3267,8 @@
                   "minTlsVersion": "1.2",
                   "healthCheckPath": "[if(not(empty(parameters('healthCheckPath'))), parameters('healthCheckPath'), null())]",
                   "webSocketsEnabled": "[parameters('webSocketsEnabled')]",
-                  "appCommandLine": "[parameters('appCommandLine')]"
+                  "appCommandLine": "[parameters('appCommandLine')]",
+                  "acrUseManagedIdentityCreds": "[parameters('acrUseManagedIdentityCreds')]"
                 },
                 "endToEndEncryptionEnabled": true
               }
@@ -2640,11 +3352,13 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-backend.{0}', parameters('solutionName')), 64))]",
-        "[resourceId('Microsoft.Resources/deployments', take(format('module.app-service-plan.{0}', parameters('solutionName')), 64))]"
+        "app_insights",
+        "chat_backend_app",
+        "hostingplan",
+        "scenario_backend_app"
       ]
     },
-    {
+    "role_assignments": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[take(format('module.role-assignments.{0}', parameters('solutionName')), 64)]",
@@ -2664,13 +3378,13 @@
           "existingFoundryProjectResourceId": {
             "value": "[parameters('existingFoundryProjectResourceId')]"
           },
-          "aiFoundryResourceId": "[if(not(variables('useExistingAIProject')), if(variables('useExistingAIProject'), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value)), createObject('value', ''))]",
+          "aiFoundryResourceId": "[if(not(variables('useExistingAIProject')), if(variables('useExistingAIProject'), createObject('value', reference('existing_project_setup').outputs.resourceId.value), createObject('value', reference('ai_foundry_project').outputs.resourceId.value)), createObject('value', ''))]",
           "aiSearchResourceId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
+            "value": "[reference('ai_search').outputs.resourceId.value]"
           },
-          "aiProjectPrincipalId": "[if(variables('useExistingAIProject'), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectIdentityPrincipalId.value), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectIdentityPrincipalId.value))]",
+          "aiProjectPrincipalId": "[if(variables('useExistingAIProject'), createObject('value', reference('existing_project_setup').outputs.projectIdentityPrincipalId.value), createObject('value', reference('ai_foundry_project').outputs.projectIdentityPrincipalId.value))]",
           "aiSearchPrincipalId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.identityPrincipalId.value]"
+            "value": "[reference('ai_search').outputs.identityPrincipalId.value]"
           },
           "deployerPrincipalId": {
             "value": "[variables('deployingUserPrincipalId')]"
@@ -2678,11 +3392,13 @@
           "deployerPrincipalType": {
             "value": "[parameters('deployingUserPrincipalType')]"
           },
-          "backendAppServicePrincipalId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-backend.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.identityPrincipalId.value]"
+          "appServicePrincipalIds": {
+            "value": {
+              "chatBackendApp": "[reference('chat_backend_app').outputs.identityPrincipalId.value]"
+            }
           },
           "cosmosDbAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value]"
+            "value": "[reference('cosmosDBModule').outputs.name.value]"
           }
         },
         "template": {
@@ -2692,7 +3408,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "6057391304588206389"
+              "templateHash": "157731772163737960"
             }
           },
           "parameters": {
@@ -2731,11 +3447,11 @@
                 "description": "Principal ID of the AI Search identity."
               }
             },
-            "backendAppServicePrincipalId": {
-              "type": "string",
-              "defaultValue": "",
+            "appServicePrincipalIds": {
+              "type": "object",
+              "defaultValue": {},
               "metadata": {
-                "description": "Principal ID of the backend App Service system-assigned identity (empty if not deployed)."
+                "description": "Principal IDs of the all App Service system-assigned identities (empty if not deployed)."
               }
             },
             "deployerPrincipalId": {
@@ -2776,6 +3492,13 @@
               "metadata": {
                 "description": "Name of the Cosmos DB account (empty if not deployed)."
               }
+            },
+            "containerRegistryResourceId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Resource ID of the container registry (empty if not deployed)."
+              }
             }
           },
           "variables": {
@@ -2789,7 +3512,8 @@
               "cognitiveServicesOpenAIUser": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
               "searchIndexDataReader": "1407120a-92aa-4202-b7e9-c0e197c71c8f",
               "searchIndexDataContributor": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
-              "searchServiceContributor": "7ca78c08-252a-4471-8644-bb5ff32d4ba0"
+              "searchServiceContributor": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
+              "acrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
             }
           },
           "resources": [
@@ -2806,13 +3530,13 @@
               }
             },
             {
-              "condition": "[and(and(not(parameters('useExistingAIProject')), not(empty(parameters('aiFoundryResourceId')))), not(empty(parameters('backendAppServicePrincipalId'))))]",
+              "condition": "[and(and(not(parameters('useExistingAIProject')), not(empty(parameters('aiFoundryResourceId')))), not(empty(parameters('appServicePrincipalIds').chatBackendApp)))]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiFoundryResourceId'), '/')))]",
-              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiFoundryResourceId'), '/'))), parameters('backendAppServicePrincipalId'), variables('roleDefinitions').cognitiveServicesUser)]",
+              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.CognitiveServices/accounts', last(split(parameters('aiFoundryResourceId'), '/'))), parameters('appServicePrincipalIds').chatBackendApp, variables('roleDefinitions').cognitiveServicesUser)]",
               "properties": {
-                "principalId": "[parameters('backendAppServicePrincipalId')]",
+                "principalId": "[parameters('appServicePrincipalIds').chatBackendApp]",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').cognitiveServicesUser)]",
                 "principalType": "ServicePrincipal"
               }
@@ -2842,24 +3566,24 @@
               }
             },
             {
-              "condition": "[and(not(empty(parameters('aiSearchResourceId'))), not(empty(parameters('backendAppServicePrincipalId'))))]",
+              "condition": "[and(not(empty(parameters('aiSearchResourceId'))), not(empty(parameters('appServicePrincipalIds').chatBackendApp)))]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.Search/searchServices', last(split(parameters('aiSearchResourceId'), '/')))]",
-              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.Search/searchServices', last(split(parameters('aiSearchResourceId'), '/'))), parameters('backendAppServicePrincipalId'), variables('roleDefinitions').searchIndexDataContributor)]",
+              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.Search/searchServices', last(split(parameters('aiSearchResourceId'), '/'))), parameters('appServicePrincipalIds').chatBackendApp, variables('roleDefinitions').searchIndexDataContributor)]",
               "properties": {
-                "principalId": "[parameters('backendAppServicePrincipalId')]",
+                "principalId": "[parameters('appServicePrincipalIds').chatBackendApp]",
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').searchIndexDataContributor)]",
                 "principalType": "ServicePrincipal"
               }
             },
             {
-              "condition": "[and(not(empty(parameters('cosmosDbAccountName'))), not(empty(parameters('backendAppServicePrincipalId'))))]",
+              "condition": "[and(not(empty(parameters('cosmosDbAccountName'))), not(empty(parameters('appServicePrincipalIds').chatBackendApp)))]",
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
               "apiVersion": "2025-10-15",
-              "name": "[format('{0}/{1}', parameters('cosmosDbAccountName'), guid(parameters('solutionName'), resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', parameters('cosmosDbAccountName'), '00000000-0000-0000-0000-000000000002'), resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosDbAccountName')), parameters('backendAppServicePrincipalId')))]",
+              "name": "[format('{0}/{1}', parameters('cosmosDbAccountName'), guid(parameters('solutionName'), resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', parameters('cosmosDbAccountName'), '00000000-0000-0000-0000-000000000002'), resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosDbAccountName')), parameters('appServicePrincipalIds').chatBackendApp))]",
               "properties": {
-                "principalId": "[parameters('backendAppServicePrincipalId')]",
+                "principalId": "[parameters('appServicePrincipalIds').chatBackendApp]",
                 "roleDefinitionId": "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', parameters('cosmosDbAccountName'), '00000000-0000-0000-0000-000000000002')]",
                 "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosDbAccountName'))]"
               }
@@ -2933,6 +3657,54 @@
                 "principalId": "[parameters('deployerPrincipalId')]",
                 "roleDefinitionId": "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', parameters('cosmosDbAccountName'), '00000000-0000-0000-0000-000000000002')]",
                 "scope": "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosDbAccountName'))]"
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('containerRegistryResourceId'))), not(empty(parameters('appServicePrincipalIds').chatBackendApp)))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/')))]",
+              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/'))), parameters('appServicePrincipalIds').chatBackendApp, variables('roleDefinitions').acrPull)]",
+              "properties": {
+                "principalId": "[parameters('appServicePrincipalIds').chatBackendApp]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').acrPull)]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('containerRegistryResourceId'))), not(empty(parameters('appServicePrincipalIds').chatFrontendApp)))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/')))]",
+              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/'))), parameters('appServicePrincipalIds').chatFrontendApp, variables('roleDefinitions').acrPull)]",
+              "properties": {
+                "principalId": "[parameters('appServicePrincipalIds').chatFrontendApp]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').acrPull)]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('containerRegistryResourceId'))), not(empty(parameters('appServicePrincipalIds').scenarioBackendApp)))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/')))]",
+              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/'))), parameters('appServicePrincipalIds').scenarioBackendApp, variables('roleDefinitions').acrPull)]",
+              "properties": {
+                "principalId": "[parameters('appServicePrincipalIds').scenarioBackendApp]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').acrPull)]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "condition": "[and(not(empty(parameters('containerRegistryResourceId'))), not(empty(parameters('appServicePrincipalIds').scenarioFrontendApp)))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/')))]",
+              "name": "[guid(parameters('solutionName'), resourceId('Microsoft.ContainerRegistry/registries', last(split(parameters('containerRegistryResourceId'), '/'))), parameters('appServicePrincipalIds').scenarioFrontendApp, variables('roleDefinitions').acrPull)]",
+              "properties": {
+                "principalId": "[parameters('appServicePrincipalIds').scenarioFrontendApp]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').acrPull)]",
+                "principalType": "ServicePrincipal"
               }
             },
             {
@@ -3025,7 +3797,7 @@
               }
             },
             {
-              "condition": "[and(parameters('useExistingAIProject'), not(empty(parameters('backendAppServicePrincipalId'))))]",
+              "condition": "[and(parameters('useExistingAIProject'), not(empty(parameters('appServicePrincipalIds').chatBackendApp)))]",
               "type": "Microsoft.Resources/deployments",
               "apiVersion": "2025-04-01",
               "name": "assignCogServicesUserRoleToBackendExisting",
@@ -3038,13 +3810,13 @@
                 "mode": "Incremental",
                 "parameters": {
                   "principalId": {
-                    "value": "[parameters('backendAppServicePrincipalId')]"
+                    "value": "[parameters('appServicePrincipalIds').chatBackendApp]"
                   },
                   "roleDefinitionId": {
                     "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleDefinitions').cognitiveServicesUser)]"
                   },
                   "roleAssignmentName": {
-                    "value": "[guid(parameters('solutionName'), variables('existingAIFoundryName'), parameters('backendAppServicePrincipalId'), variables('roleDefinitions').cognitiveServicesUser)]"
+                    "value": "[guid(parameters('solutionName'), variables('existingAIFoundryName'), parameters('appServicePrincipalIds').chatBackendApp, variables('roleDefinitions').cognitiveServicesUser)]"
                   },
                   "aiFoundryName": {
                     "value": "[variables('existingAIFoundryName')]"
@@ -3117,14 +3889,14 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-backend.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64))]"
+        "ai_foundry_project",
+        "ai_search",
+        "chat_backend_app",
+        "cosmosDBModule",
+        "existing_project_setup"
       ]
     }
-  ],
+  },
   "outputs": {
     "SOLUTION_NAME": {
       "type": "string",
@@ -3152,14 +3924,14 @@
       "metadata": {
         "description": "Application Insights instrumentation key."
       },
-      "value": "[if(parameters('enableMonitoring'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-insights.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.instrumentationKey.value, '')]"
+      "value": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.instrumentationKey.value, '')]"
     },
     "AZURE_AI_PROJECT_CONN_STRING": {
       "type": "string",
       "metadata": {
         "description": "Azure AI project endpoint."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]"
     },
     "AZURE_AI_AGENT_API_VERSION": {
       "type": "string",
@@ -3173,28 +3945,28 @@
       "metadata": {
         "description": "Name of the Azure AI Foundry project."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectName.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectName.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectName.value, reference('ai_foundry_project').outputs.projectName.value)]"
     },
     "AZURE_COSMOSDB_ACCOUNT": {
       "type": "string",
       "metadata": {
         "description": "Name of the Cosmos DB account."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value]"
+      "value": "[reference('cosmosDBModule').outputs.name.value]"
     },
     "COSMOS_DB_ENDPOINT": {
       "type": "string",
       "metadata": {
         "description": "Cosmos DB endpoint URL."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value]"
+      "value": "[reference('cosmosDBModule').outputs.endpoint.value]"
     },
     "COSMOS_DB_DATABASE_NAME": {
       "type": "string",
       "metadata": {
         "description": "Name of the Cosmos DB database."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.databaseName.value]"
+      "value": "[reference('cosmosDBModule').outputs.databaseName.value]"
     },
     "AZURE_COSMOSDB_CONVERSATIONS_CONTAINER": {
       "type": "string",
@@ -3208,7 +3980,7 @@
       "metadata": {
         "description": "Name of the Cosmos DB database (alias)."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.cosmos-db-nosql.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.databaseName.value]"
+      "value": "[reference('cosmosDBModule').outputs.databaseName.value]"
     },
     "AZURE_OPENAI_DEPLOYMENT_MODEL": {
       "type": "string",
@@ -3236,7 +4008,7 @@
       "metadata": {
         "description": "Azure OpenAI service endpoint URL."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.endpoint.value, reference('ai_foundry_project').outputs.endpoint.value)]"
     },
     "AZURE_OPENAI_MODEL_DEPLOYMENT_TYPE": {
       "type": "string",
@@ -3250,7 +4022,7 @@
       "metadata": {
         "description": "Azure AI Search service endpoint URL."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.endpoint.value]"
+      "value": "[reference('ai_search').outputs.endpoint.value]"
     },
     "AZURE_OPENAI_API_VERSION": {
       "type": "string",
@@ -3264,7 +4036,7 @@
       "metadata": {
         "description": "Name of the Azure OpenAI resource."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.name.value, reference('ai_foundry_project').outputs.name.value)]"
     },
     "REACT_APP_LAYOUT_CONFIG": {
       "type": "string",
@@ -3299,14 +4071,14 @@
       "metadata": {
         "description": "Azure AI Agent service endpoint URL."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]"
     },
     "AZURE_FOUNDRY_ENDPOINT": {
       "type": "string",
       "metadata": {
         "description": "Azure AI Foundry project endpoint URL."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.projectEndpoint.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.projectEndpoint.value, reference('ai_foundry_project').outputs.projectEndpoint.value)]"
     },
     "AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME": {
       "type": "string",
@@ -3334,42 +4106,98 @@
       "metadata": {
         "description": "Name of the Azure AI Services resource."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.name.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.name.value, reference('ai_foundry_project').outputs.name.value)]"
     },
     "API_APP_NAME": {
       "type": "string",
       "metadata": {
-        "description": "Name of the backend API App Service."
+        "description": "Name of the chat backend API App Service."
       },
-      "value": "[format('api-{0}', variables('solutionSuffix'))]"
+      "value": "[reference('chat_backend_app').outputs.name.value]"
     },
     "API_PID": {
       "type": "string",
       "metadata": {
-        "description": "Principal ID of the backend system-assigned managed identity."
+        "description": "Principal ID of the chat backend system-assigned managed identity."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-backend.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.identityPrincipalId.value]"
+      "value": "[reference('chat_backend_app').outputs.identityPrincipalId.value]"
     },
     "API_APP_URL": {
       "type": "string",
       "metadata": {
-        "description": "URL of the backend API application."
+        "description": "API App Service URL."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-backend.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.appUrl.value]"
+      "value": "[reference('chat_backend_app').outputs.appUrl.value]"
     },
     "WEB_APP_URL": {
       "type": "string",
       "metadata": {
-        "description": "URL of the frontend web application."
+        "description": "Web App Service URL."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-service-frontend.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.appUrl.value]"
+      "value": "[reference('chat_frontend_app').outputs.appUrl.value]"
+    },
+    "CHAT_API_APP_URL": {
+      "type": "string",
+      "metadata": {
+        "description": "Chat API App Service URL."
+      },
+      "value": "[reference('chat_backend_app').outputs.appUrl.value]"
+    },
+    "CHAT_WEB_APP_URL": {
+      "type": "string",
+      "metadata": {
+        "description": "Chat Web App Service URL."
+      },
+      "value": "[reference('chat_frontend_app').outputs.appUrl.value]"
+    },
+    "SCENARIO_API_APP_URL": {
+      "type": "string",
+      "metadata": {
+        "description": "E-commerce API App Service URL."
+      },
+      "value": "[reference('scenario_backend_app').outputs.appUrl.value]"
+    },
+    "SCENARIO_WEB_APP_URL": {
+      "type": "string",
+      "metadata": {
+        "description": "E-commerce Web App Service URL."
+      },
+      "value": "[reference('scenario_frontend_app').outputs.appUrl.value]"
+    },
+    "CHAT_API_APP_NAME": {
+      "type": "string",
+      "metadata": {
+        "description": "Chat API App Service Name."
+      },
+      "value": "[reference('chat_backend_app').outputs.name.value]"
+    },
+    "CHAT_WEB_APP_NAME": {
+      "type": "string",
+      "metadata": {
+        "description": "Chat Web App Service Name."
+      },
+      "value": "[reference('chat_frontend_app').outputs.name.value]"
+    },
+    "SCENARIO_API_APP_NAME": {
+      "type": "string",
+      "metadata": {
+        "description": "E-commerce API App Service Name."
+      },
+      "value": "[reference('scenario_backend_app').outputs.name.value]"
+    },
+    "SCENARIO_WEB_APP_NAME": {
+      "type": "string",
+      "metadata": {
+        "description": "E-commerce Web App Service Name."
+      },
+      "value": "[reference('scenario_frontend_app').outputs.name.value]"
     },
     "APPLICATIONINSIGHTS_CONNECTION_STRING": {
       "type": "string",
       "metadata": {
         "description": "Application Insights connection string."
       },
-      "value": "[if(parameters('enableMonitoring'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.app-insights.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.connectionString.value, '')]"
+      "value": "[if(parameters('enableMonitoring'), reference('app_insights').outputs.connectionString.value, '')]"
     },
     "AGENT_ID_CHAT": {
       "type": "string",
@@ -3404,14 +4232,14 @@
       "metadata": {
         "description": "Resource ID of the Azure AI Foundry account."
       },
-      "value": "[if(variables('useExistingAIProject'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', variables('aiFoundrySubscriptionId'), variables('aiFoundryResourceGroupName')), 'Microsoft.Resources/deployments', take(format('module.existing-project-setup.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value, reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-foundry-project.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value)]"
+      "value": "[if(variables('useExistingAIProject'), reference('existing_project_setup').outputs.resourceId.value, reference('ai_foundry_project').outputs.resourceId.value)]"
     },
     "AI_SEARCH_SERVICE_RESOURCE_ID": {
       "type": "string",
       "metadata": {
         "description": "Resource ID of the Azure AI Search service."
       },
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', take(format('module.ai-search.{0}', parameters('solutionName')), 64)), '2025-04-01').outputs.resourceId.value]"
+      "value": "[reference('ai_search').outputs.resourceId.value]"
     },
     "APP_ENV": {
       "type": "string",

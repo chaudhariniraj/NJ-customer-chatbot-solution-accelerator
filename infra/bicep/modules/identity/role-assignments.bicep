@@ -25,8 +25,8 @@ param aiProjectPrincipalId string = ''
 @description('Principal ID of the AI Search identity.')
 param aiSearchPrincipalId string = ''
 
-@description('Principal ID of the backend App Service system-assigned identity (empty if not deployed).')
-param backendAppServicePrincipalId string = ''
+@description('Principal IDs of the all App Service system-assigned identities (empty if not deployed).')
+param appServicePrincipalIds object = {}
 
 @description('Principal ID of the deploying user (for user access roles).')
 param deployerPrincipalId string = ''
@@ -125,25 +125,25 @@ module assignOpenAIToSearchExisting './cross-scope-role-assignment.bicep' = if (
   }
 }
 
-// Backend App Service → Cognitive Services User on AI Foundry (new project — required for Voice Live and agents)
-resource backendAppCogServicesUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAIProject && !empty(aiFoundryResourceId) && !empty(backendAppServicePrincipalId)) {
-  name: guid(solutionName, aiFoundryAccount.id, backendAppServicePrincipalId, roleDefinitions.cognitiveServicesUser)
+// Chat Backend App Service → Cognitive Services User on AI Foundry (new project — required for Voice Live and agents)
+resource backendAppCogServicesUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAIProject && !empty(aiFoundryResourceId) && !empty(appServicePrincipalIds.chatBackendApp)) {
+  name: guid(solutionName, aiFoundryAccount.id, appServicePrincipalIds.chatBackendApp, roleDefinitions.cognitiveServicesUser)
   scope: aiFoundryAccount
   properties: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.cognitiveServicesUser)
     principalType: 'ServicePrincipal'
   }
 }
 
-// Backend App Service → Cognitive Services User on existing AI Foundry (cross-scope — Voice Live and agents)
-module backendAppCogServicesUserExisting './cross-scope-role-assignment.bicep' = if (useExistingAIProject && !empty(backendAppServicePrincipalId)) {
+// Chat Backend App Service → Cognitive Services User on existing AI Foundry (cross-scope — Voice Live and agents)
+module backendAppCogServicesUserExisting './cross-scope-role-assignment.bicep' = if (useExistingAIProject && !empty(appServicePrincipalIds.chatBackendApp)) {
   name: 'assignCogServicesUserRoleToBackendExisting'
   scope: resourceGroup(existingAIFoundrySubscription, existingAIFoundryResourceGroup)
   params: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.cognitiveServicesUser)
-    roleAssignmentName: guid(solutionName, existingAIFoundryName, backendAppServicePrincipalId, roleDefinitions.cognitiveServicesUser)
+    roleAssignmentName: guid(solutionName, existingAIFoundryName, appServicePrincipalIds.chatBackendApp, roleDefinitions.cognitiveServicesUser)
     aiFoundryName: existingAIFoundryName
   }
 }
@@ -175,12 +175,12 @@ resource projectSearchContributor 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-// Backend App Service → Search Index Data Contributor on AI Search
-resource backendAppSearchContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(aiSearchResourceId) && !empty(backendAppServicePrincipalId)) {
-  name: guid(solutionName, aiSearchService.id, backendAppServicePrincipalId, roleDefinitions.searchIndexDataContributor)
+// Chat Backend App Service → Search Index Data Contributor on AI Search
+resource chatBackendAppSearchContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(aiSearchResourceId) && !empty(appServicePrincipalIds.chatBackendApp)) {
+  name: guid(solutionName, aiSearchService.id, appServicePrincipalIds.chatBackendApp, roleDefinitions.searchIndexDataContributor)
   scope: aiSearchService
   properties: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.searchIndexDataContributor)
     principalType: 'ServicePrincipal'
   }
@@ -191,11 +191,11 @@ resource backendAppSearchContributorAssignment 'Microsoft.Authorization/roleAssi
 //    Backend App Service → Cosmos DB (data-plane, uses sqlRoleAssignments)
 // ============================================================================
 
-resource backendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15' = if (!empty(cosmosDbAccountName) && !empty(backendAppServicePrincipalId)) {
+resource chatBackendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15' = if (!empty(cosmosDbAccountName) && !empty(appServicePrincipalIds.chatBackendApp)) {
   parent: cosmosAccount
-  name: guid(solutionName, cosmosContributorRoleDefinition.id, cosmosAccount.id, backendAppServicePrincipalId)
+  name: guid(solutionName, cosmosContributorRoleDefinition.id, cosmosAccount.id, appServicePrincipalIds.chatBackendApp)
   properties: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: cosmosContributorRoleDefinition.id
     scope: cosmosAccount.id
   }
@@ -203,7 +203,7 @@ resource backendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/s
 
 // ============================================================================
 // 4. DEPLOYER (USER) ROLE ASSIGNMENTS
-//    Deploying user → AI Services, Search, Cosmos DB (Bicep-only), and container registry
+//    Deploying user → AI Services, Search, Cosmos DB (Bicep-only)
 // ============================================================================
 
 // Deploying User → Foundry User on AI Services
@@ -272,13 +272,47 @@ resource deployerCosmosDbContributor 'Microsoft.DocumentDB/databaseAccounts/sqlR
   }
 }
 
-// Deploying User → AcrPull on container registry
-resource deployerAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryResourceId) && !empty(deployerPrincipalId)) {
+// ============================================================================
+// 5. CONTAINER REGISTRY ROLE ASSIGNMENTS
+// App Service identities → ACR Pull (for container image pulls)
+// ===========================================================================
+
+resource chatBackendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryResourceId) && !empty(appServicePrincipalIds.chatBackendApp)) {
   scope: containerRegistry
-  name: guid(solutionName, containerRegistry.id, deployerPrincipalId, roleDefinitions.acrPull)
+  name: guid(solutionName, containerRegistry.id, appServicePrincipalIds.chatBackendApp, roleDefinitions.acrPull)
   properties: {
-    principalId: deployerPrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.acrPull)
-    principalType: deployerPrincipalType
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource chatFrontendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryResourceId) && !empty(appServicePrincipalIds.chatFrontendApp)) {
+  scope: containerRegistry
+  name: guid(solutionName, containerRegistry.id, appServicePrincipalIds.chatFrontendApp, roleDefinitions.acrPull)
+  properties: {
+    principalId: appServicePrincipalIds.chatFrontendApp
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.acrPull)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource scenarioBackendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryResourceId) && !empty(appServicePrincipalIds.scenarioBackendApp)) {
+  scope: containerRegistry
+  name: guid(solutionName, containerRegistry.id, appServicePrincipalIds.scenarioBackendApp, roleDefinitions.acrPull)
+  properties: {
+    principalId: appServicePrincipalIds.scenarioBackendApp
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.acrPull)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource scenarioFrontendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryResourceId) && !empty(appServicePrincipalIds.scenarioFrontendApp)) {
+  scope: containerRegistry
+  name: guid(solutionName, containerRegistry.id, appServicePrincipalIds.scenarioFrontendApp, roleDefinitions.acrPull)
+  properties: {
+    principalId: appServicePrincipalIds.scenarioFrontendApp
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.acrPull)
+    principalType: 'ServicePrincipal'
   }
 }
