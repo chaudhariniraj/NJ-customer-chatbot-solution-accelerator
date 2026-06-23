@@ -284,6 +284,8 @@ jobs:
           azd env set AZURE_ENV_GPT_MODEL_CAPACITY="$gptCapacity"
           $deploymentFlavor = if ($env:INPUT_DEPLOYMENT_FLAVOR) { $env:INPUT_DEPLOYMENT_FLAVOR } else { 'bicep' }
           azd env set DEPLOYMENT_FLAVOR="$deploymentFlavor"
+          # CI/CD deploys via OIDC service principal, so role assignments must use ServicePrincipal principal type
+          azd env set AZURE_PRINCIPAL_TYPE="ServicePrincipal"
 
           # Set ACR name only when building Docker image
           if ("$env:INPUT_BUILD_DOCKER_IMAGE" -eq "true") {

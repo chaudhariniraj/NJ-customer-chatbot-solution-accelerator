@@ -279,6 +279,8 @@ jobs:
           azd env set AZURE_ENV_IMAGETAG="$INPUT_IMAGE_TAG"
           azd env set AZURE_ENV_GPT_MODEL_CAPACITY="${INPUT_AZURE_ENV_GPT_MODEL_CAPACITY:-10}"
           azd env set DEPLOYMENT_FLAVOR="${INPUT_DEPLOYMENT_FLAVOR:-bicep}"
+          # CI/CD deploys via OIDC service principal, so role assignments must use ServicePrincipal principal type
+          azd env set AZURE_PRINCIPAL_TYPE="ServicePrincipal"
           
           if [[ "$INPUT_BUILD_DOCKER_IMAGE" == "true" ]]; then
             ACR_NAME="${{ vars.ACR_TEST_LOGIN_SERVER }}"
