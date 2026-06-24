@@ -276,8 +276,7 @@ jobs:
           azd env set AZURE_LOCATION="$env:INPUT_AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$env:INPUT_RESOURCE_GROUP_NAME"
           azd env set AZURE_ENV_IMAGETAG="$env:INPUT_IMAGE_TAG"
-          $deploymentFlavor = if ($env:INPUT_DEPLOYMENT_FLAVOR) { $env:INPUT_DEPLOYMENT_FLAVOR } else { 'bicep' }
-          azd env set DEPLOYMENT_FLAVOR="$deploymentFlavor"
+          azd env set DEPLOYMENT_FLAVOR="$env:INPUT_DEPLOYMENT_FLAVOR"
           # CI/CD deploys via OIDC service principal, so role assignments must use ServicePrincipal principal type
           azd env set AZURE_PRINCIPAL_TYPE="ServicePrincipal"
 

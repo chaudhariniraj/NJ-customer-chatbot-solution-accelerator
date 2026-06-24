@@ -102,6 +102,7 @@ on:
 
 jobs:
   validate-inputs:
+    name: Validate Workflow Inputs
     runs-on: ubuntu-latest
     outputs:
       validation_passed: ${{ steps.validate.outputs.passed }}

@@ -204,7 +204,7 @@ jobs:
           INPUT_ENABLE_SCALABILITY: ${{ inputs.ENABLE_SCALABILITY }}
         run: |
           set -euo pipefail
-          DEPLOYMENT_FLAVOR="${INPUT_DEPLOYMENT_FLAVOR:-bicep}"
+          DEPLOYMENT_FLAVOR="$INPUT_DEPLOYMENT_FLAVOR"
           if [[ "$DEPLOYMENT_FLAVOR" == "avm-waf" ]]; then
             cp infra/main.waf.parameters.json infra/main.parameters.json
             echo "✅ Deployment flavour 'avm-waf' - copied WAF parameters to main parameters file"
@@ -273,7 +273,7 @@ jobs:
           azd env set AZURE_LOCATION="$INPUT_AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$INPUT_RESOURCE_GROUP_NAME"
           azd env set AZURE_ENV_IMAGETAG="$INPUT_IMAGE_TAG"
-          azd env set DEPLOYMENT_FLAVOR="${INPUT_DEPLOYMENT_FLAVOR:-bicep}"
+          azd env set DEPLOYMENT_FLAVOR="$INPUT_DEPLOYMENT_FLAVOR"
           # CI/CD deploys via OIDC service principal, so role assignments must use ServicePrincipal principal type
           azd env set AZURE_PRINCIPAL_TYPE="ServicePrincipal"
           
