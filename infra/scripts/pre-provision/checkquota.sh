@@ -62,59 +62,12 @@ echo "   - OpenAI.GlobalStandard.gpt4.1-mini: ${GPT_MIN_CAPACITY}"
 echo "   - OpenAI.GlobalStandard.text-embedding-3-small: ${EMBEDDING_MIN_CAPACITY}"
 echo "   - OpenAI.GlobalStandard.gpt-realtime-mini: ${GPT_REALTIME_MIN_CAPACITY}"
 
-# Check subscription-level GlobalStandard quotas FIRST
-echo "----------------------------------------"
-echo "🔍 Checking subscription-level GlobalStandard quota..."
-GLOBALSTANDARD_QUOTA_FAILED=false
-
-# Query subscription-level quota usage for GlobalStandard models
-QUOTA_RESPONSE=$(az rest --method GET \
-  --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.Quota/quotas?api-version=2023-02-01" \
-  -o json 2>/dev/null)
-
-if [[ -n "$QUOTA_RESPONSE" ]]; then
-  # Look for GlobalStandard quotas and check if any are exhausted
-  echo "$QUOTA_RESPONSE" | grep -i "GlobalStandard" > /dev/null 2>&1
-  if [[ $? -eq 0 ]]; then
-    # Extract quota entries and check usage vs limit
-    while IFS= read -r quota_entry; do
-      if [[ -n "$quota_entry" && "$quota_entry" == *"GlobalStandard"* ]]; then
-        echo "  📊 GlobalStandard quota entry found"
-        # Check usageValue and limit fields
-        USAGE=$(echo "$quota_entry" | grep -o '"usageValue"[^,]*' | grep -o '[0-9]*$' || echo "0")
-        LIMIT=$(echo "$quota_entry" | grep -o '"limit"[^,]*' | grep -o '[0-9]*$' || echo "0")
-        
-        if [[ "$USAGE" -ge "$LIMIT" && "$LIMIT" -gt 0 ]]; then
-          echo "  ❌ GlobalStandard quota exhausted: $USAGE/$LIMIT TPM"
-          GLOBALSTANDARD_QUOTA_FAILED=true
-        fi
-      fi
-    done < <(echo "$QUOTA_RESPONSE" | tr ',' '\n')
-  fi
-fi
-
-if [[ "$GLOBALSTANDARD_QUOTA_FAILED" == "true" ]]; then
-  echo "❌ ERROR: Subscription-level GlobalStandard quota is exhausted."
-  echo "   Please request a quota increase in the Azure Portal or use a different model deployment strategy."
-  echo "QUOTA_FAILED=true" >> "$GITHUB_ENV"
-  exit 0
-fi
-
 # Iterate through ALL regions and select the one with the highest available GPT quota.
 VALID_REGION=""
 VALID_REGION_AVAILABLE_CAPACITY=-1
 for REGION in "${REGIONS[@]}"; do
     echo "----------------------------------------"
     echo "🔍 Checking region: $REGION"
-
-    # Check if Search service provider is available in this region
-    echo "  📋 Checking Search service availability in $REGION..."
-    SEARCH_AVAILABLE=$(az search service list-skus --region "$REGION" -o json 2>/dev/null | grep -c '"name"' || echo "0")
-    if [[ "$SEARCH_AVAILABLE" -le 0 ]]; then
-        echo "  ⚠️ WARNING: Search service is not available in $REGION. Trying next region..."
-        continue
-    fi
-    echo "  ✅ Search service is available in $REGION"
 
     USAGE_COUNT=$(az cognitiveservices usage list --location "$REGION" --query 'length(@)' -o tsv 2>/dev/null || echo "0")
     if [[ -z "$USAGE_COUNT" || "$USAGE_COUNT" == "0" ]]; then
