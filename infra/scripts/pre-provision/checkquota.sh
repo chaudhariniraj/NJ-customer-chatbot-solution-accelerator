@@ -171,6 +171,5 @@ else
         echo "  ✅ $MODEL: ${MIN_CAPACITY[$MODEL]} capacity available"
     done
     echo "VALID_REGION=$VALID_REGION" >> "$GITHUB_ENV"
-    echo "AVAILABLE_CAPACITY=$VALID_REGION_AVAILABLE_CAPACITY" >> "$GITHUB_ENV"
     exit 0
 fi
