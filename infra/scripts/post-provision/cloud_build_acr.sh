@@ -10,7 +10,7 @@ TAG="${AZURE_ENV_IMAGETAG:-latest_v2}"
 SCENARIO="${AZURE_ENV_SCENARIO:-ecommerce}"
 REG="${ACR_NAME:?ACR_NAME missing after provision.}"
 RG="${RESOURCE_GROUP_NAME:?RESOURCE_GROUP_NAME missing after provision.}"
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 R_CHAT_BE="${AZURE_ENV_CHAT_BACKEND_IMAGE_REPO:-chat-backend}"
 R_CHAT_FE="${AZURE_ENV_CHAT_FRONTEND_IMAGE_REPO:-chat-frontend}"

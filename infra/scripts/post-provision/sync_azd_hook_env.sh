@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/../.." && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"
 PY="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)"
 if [[ -z "$PY" ]]; then
   echo "sync_azd_hook_env.sh: python not found" >&2

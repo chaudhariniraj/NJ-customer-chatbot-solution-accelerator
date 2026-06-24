@@ -27,8 +27,8 @@ param aiProjectPrincipalId string = ''
 @description('Principal ID of the AI Search identity.')
 param aiSearchPrincipalId string = ''
 
-@description('Principal ID of the backend App Service system-assigned identity (empty if not deployed).')
-param backendAppServicePrincipalId string = ''
+@description('Principal IDs of the App Service system-assigned identities (empty if not deployed).')
+param appServicePrincipalIds object = {}
 
 @description('Principal ID of the deploying user (for deployer Cosmos DB access).')
 param deployerPrincipalId string = ''
@@ -57,6 +57,8 @@ var existingAIFoundryResourceGroup = useExistingAIProject ? split(existingFoundr
 // ============================================================================
 
 var roleDefinitions = {
+  azureAiUser: '53ca6127-db72-4b80-b1b0-d745d6d5456d' // Foundry User
+  azureAiDeveloper: '64702f94-c441-49e6-a78b-ef80e0188fee'
   cognitiveServicesUser: 'a97b65f3-24c7-4388-baec-2e87135dc908'
   cognitiveServicesOpenAIUser: '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
   searchIndexDataReader: '1407120a-92aa-4202-b7e9-c0e197c71c8f'
@@ -113,25 +115,25 @@ module assignOpenAIToSearchExisting './cross-scope-role-assignment.bicep' = if (
   }
 }
 
-// Backend App Service → Cognitive Services User on AI Foundry (new project — required for Voice Live and agents)
-resource backendAppCogServicesUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAIProject && !empty(aiFoundryResourceId) && !empty(backendAppServicePrincipalId)) {
-  name: guid(solutionName, aiFoundryAccount.id, backendAppServicePrincipalId, roleDefinitions.cognitiveServicesUser)
+// Chat Backend App Service → Cognitive Services User on AI Foundry (new project — required for Voice Live and agents)
+resource chatBackendAppCogServicesUserAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAIProject && !empty(aiFoundryResourceId) && !empty(appServicePrincipalIds.chatBackendApp)) {
+  name: guid(solutionName, aiFoundryAccount.id, appServicePrincipalIds.chatBackendApp, roleDefinitions.cognitiveServicesUser)
   scope: aiFoundryAccount
   properties: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.cognitiveServicesUser)
     principalType: 'ServicePrincipal'
   }
 }
 
-// Backend App Service → Cognitive Services User on existing AI Foundry (cross-scope — Voice Live and agents)
-module backendAppCogServicesUserExisting './cross-scope-role-assignment.bicep' = if (useExistingAIProject && !empty(backendAppServicePrincipalId)) {
-  name: 'assignCogServicesUserRoleToBackendExisting'
+// Chat Backend App Service → Cognitive Services User on existing AI Foundry (cross-scope — Voice Live and agents)
+module chatBackendAppCogServicesUserExisting './cross-scope-role-assignment.bicep' = if (useExistingAIProject && !empty(appServicePrincipalIds.chatBackendApp)) {
+  name: 'assignCogServicesUserRoleToChatBackendExisting'
   scope: resourceGroup(existingAIFoundrySubscription, existingAIFoundryResourceGroup)
   params: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.cognitiveServicesUser)
-    roleAssignmentName: guid(solutionName, existingAIFoundryName, backendAppServicePrincipalId, roleDefinitions.cognitiveServicesUser)
+    roleAssignmentName: guid(solutionName, existingAIFoundryName, appServicePrincipalIds.chatBackendApp, roleDefinitions.cognitiveServicesUser)
     aiFoundryName: existingAIFoundryName
   }
 }
@@ -163,12 +165,12 @@ resource projectSearchContributor 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
-// Backend App Service → Search Index Data Contributor on AI Search
-resource backendAppSearchContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(aiSearchResourceId) && !empty(backendAppServicePrincipalId)) {
-  name: guid(solutionName, aiSearchService.id, backendAppServicePrincipalId, roleDefinitions.searchIndexDataContributor)
+// Chat Backend App Service → Search Index Data Contributor on AI Search
+resource chatBackendAppSearchContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(aiSearchResourceId) && !empty(appServicePrincipalIds.chatBackendApp)) {
+  name: guid(solutionName, aiSearchService.id, appServicePrincipalIds.chatBackendApp, roleDefinitions.searchIndexDataContributor)
   scope: aiSearchService
   properties: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.searchIndexDataContributor)
     principalType: 'ServicePrincipal'
   }
@@ -176,16 +178,86 @@ resource backendAppSearchContributorAssignment 'Microsoft.Authorization/roleAssi
 
 // ============================================================================
 // 3. COSMOS DB ROLE ASSIGNMENTS
-//    Backend App Service + Deployer → Cosmos DB (data-plane, uses sqlRoleAssignments)
+//    Backend App Service → Cosmos DB (data-plane, uses sqlRoleAssignments)
 // ============================================================================
 
-resource backendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15' = if (!empty(cosmosDbAccountName) && !empty(backendAppServicePrincipalId)) {
+resource chatBackendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15' = if (!empty(cosmosDbAccountName) && !empty(appServicePrincipalIds.chatBackendApp)) {
   parent: cosmosAccount
-  name: guid(solutionName, cosmosContributorRoleDefinition.id, cosmosAccount.id, backendAppServicePrincipalId)
+  name: guid(solutionName, cosmosContributorRoleDefinition.id, cosmosAccount.id, appServicePrincipalIds.chatBackendApp)
   properties: {
-    principalId: backendAppServicePrincipalId
+    principalId: appServicePrincipalIds.chatBackendApp
     roleDefinitionId: cosmosContributorRoleDefinition.id
     scope: cosmosAccount.id
+  }
+}
+
+resource scenarioBackendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15' = if (!empty(cosmosDbAccountName) && !empty(appServicePrincipalIds.scenarioBackendApp)) {
+  parent: cosmosAccount
+  name: guid(solutionName, cosmosContributorRoleDefinition.id, cosmosAccount.id, appServicePrincipalIds.scenarioBackendApp)
+  properties: {
+    principalId: appServicePrincipalIds.scenarioBackendApp
+    roleDefinitionId: cosmosContributorRoleDefinition.id
+    scope: cosmosAccount.id
+  }
+}
+
+// ============================================================================
+// 4. DEPLOYER (USER) ROLE ASSIGNMENTS
+//    Deploying user → AI Services, Search, Cosmos DB (Bicep-only)
+// ============================================================================
+
+// Deploying User → Foundry User on AI Services
+resource deployerAzureAIAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAIProject && !empty(deployerPrincipalId) && !empty(aiFoundryResourceId)) {
+  scope: aiFoundryAccount
+  name: guid(solutionName, aiFoundryAccount.id, deployerPrincipalId, roleDefinitions.azureAiUser)
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.azureAiUser)
+    principalType: 'User'
+  }
+}
+
+// Deploying User → Azure AI Developer on AI Services
+resource deployerAzureAIDeveloper 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingAIProject && !empty(deployerPrincipalId) && !empty(aiFoundryResourceId)) {
+  scope: aiFoundryAccount
+  name: guid(solutionName, aiFoundryAccount.id, deployerPrincipalId, roleDefinitions.azureAiDeveloper)
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.azureAiDeveloper)
+    principalType: 'User'
+  }
+}
+
+// Deploying User → Search Service Contributor on AI Search
+resource deployerSearchServiceContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId) && !empty(aiSearchResourceId)) {
+  scope: aiSearchService
+  name: guid(solutionName, aiSearchService.id, deployerPrincipalId, roleDefinitions.searchServiceContributor)
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.searchServiceContributor)
+    principalType: 'User'
+  }
+}
+
+// Deploying User → Search Index Data Contributor on AI Search
+resource deployerSearchIndexContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId) && !empty(aiSearchResourceId)) {
+  scope: aiSearchService
+  name: guid(solutionName, aiSearchService.id, deployerPrincipalId, roleDefinitions.searchIndexDataContributor)
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.searchIndexDataContributor)
+    principalType: 'User'
+  }
+}
+
+// Deploying User → Search Index Data Reader on AI Search
+resource deployerSearchIndexReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(deployerPrincipalId) && !empty(aiSearchResourceId)) {
+  scope: aiSearchService
+  name: guid(solutionName, aiSearchService.id, deployerPrincipalId, roleDefinitions.searchIndexDataReader)
+  properties: {
+    principalId: deployerPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleDefinitions.searchIndexDataReader)
+    principalType: 'User'
   }
 }
 

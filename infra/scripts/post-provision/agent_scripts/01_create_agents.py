@@ -12,12 +12,13 @@ from azure.ai.projects.models import (
     FunctionTool,
     PromptAgentDefinition,
 )
+from agent_framework.azure import AzureAIProjectAgentProvider
 from azure.identity.aio import AzureCliCredential
 from dotenv import load_dotenv
 
 load_dotenv()
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from scenarios.scenario_loader import load_agent_instructions, load_manifest, resolve_scenario, catalog_tool_name, policy_tool_name
 
 p = argparse.ArgumentParser()
@@ -57,6 +58,10 @@ async def create_agents():
     async with (
         AzureCliCredential() as credential,
         AIProjectClient(endpoint=ai_project_endpoint, credential=credential) as project_client,
+        AzureAIProjectAgentProvider(
+            project_client=project_client,
+            credential=credential,
+        ) as provider,
     ):
         ai_search_conn_id = await get_ai_search_connection_id(project_client)
 

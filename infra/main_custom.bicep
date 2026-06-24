@@ -45,6 +45,8 @@ param tags object = {}
   'eastus2'
   'francecentral'
   'swedencentral'
+  'centralus'
+  'southindia'
 ])
 @metadata({
   azd: {
@@ -463,6 +465,7 @@ module chat_backend_app './bicep/modules/compute/app-service.bicep' = {
     kind: 'app,linux,container'
     linuxFxVersion: chatbackendImageName
     serverFarmResourceId: hostingplan.outputs.resourceId
+    acrUseManagedIdentityCreds: true
     webSocketsEnabled: true
     healthCheckPath: '/health'
     appSettings: {
@@ -556,6 +559,7 @@ module scenario_backend_app './bicep/modules/compute/app-service.bicep' = {
     kind: 'app,linux,container'
     linuxFxVersion: scenarioBackendImageName
     serverFarmResourceId: hostingplan.outputs.resourceId
+    acrUseManagedIdentityCreds: true
     webSocketsEnabled: true
     healthCheckPath: '/health'
     appSettings: {
@@ -624,7 +628,7 @@ module scenario_frontend_app './bicep/modules/compute/app-service.bicep' = {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: scenario_backend_app.outputs.appUrl
       VITE_CHAT_API_BASE_URL: chat_backend_app.outputs.appUrl
-      BACKEND_API_URL: ''
+      // BACKEND_API_URL: ''
       DEPLOYMENT_SCENARIO: deploymentScenario
       VITE_SCENARIO: deploymentScenario
       VITE_HOST_APP_TITLE: hostAppTitle
@@ -755,7 +759,7 @@ output AI_SERVICE_NAME string = aiFoundryName
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = container_registry.outputs.loginServer
 
 @description('Name of the Azure Container Registry.')
-output ACR_NAME string = container_registry.name
+output ACR_NAME string = container_registry.outputs.name
 
 @description('Name of the chat backend API App Service.')
 output API_APP_NAME string = chat_backend_app.outputs.name
@@ -813,6 +817,9 @@ output AI_FOUNDRY_RESOURCE_ID string = aiFoundryResourceId
 
 @description('Resource ID of the Azure AI Search service.')
 output AI_SEARCH_SERVICE_RESOURCE_ID string = ai_search.outputs.resourceId
+
+@description('Deployment scenario (ecommerce, healthcare, banking).')
+output AZURE_ENV_SCENARIO string = deploymentScenario
 
 @description('Application environment (Production)')
 output APP_ENV string = 'Prod'

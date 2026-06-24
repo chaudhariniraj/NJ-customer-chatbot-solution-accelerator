@@ -45,6 +45,8 @@ param tags object = {}
   'eastus2'
   'francecentral'
   'swedencentral'
+  'centralus'
+  'southindia'
 ])
 @metadata({
   azd: {
@@ -610,7 +612,7 @@ module scenario_frontend_app './modules/compute/app-service.bicep' = {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: scenario_backend_app.outputs.appUrl
       VITE_CHAT_API_BASE_URL: chat_backend_app.outputs.appUrl
-      BACKEND_API_URL: ''
+      // BACKEND_API_URL: ''
       DEPLOYMENT_SCENARIO: deploymentScenario
       VITE_SCENARIO: deploymentScenario
       VITE_HOST_APP_TITLE: hostAppTitle
@@ -639,6 +641,7 @@ module role_assignments './modules/identity/role-assignments.bicep' = {
     deployerPrincipalType: deployingUserPrincipalType
     appServicePrincipalIds: {
       chatBackendApp: chat_backend_app.outputs.identityPrincipalId
+      scenarioBackendApp: scenario_backend_app.outputs.identityPrincipalId
     }
     cosmosDbAccountName: cosmosDBModule.outputs.name
   }

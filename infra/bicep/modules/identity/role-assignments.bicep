@@ -201,6 +201,16 @@ resource chatBackendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccoun
   }
 }
 
+resource scenarioBackendAppCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2025-10-15' = if (!empty(cosmosDbAccountName) && !empty(appServicePrincipalIds.scenarioBackendApp)) {
+  parent: cosmosAccount
+  name: guid(solutionName, cosmosContributorRoleDefinition.id, cosmosAccount.id, appServicePrincipalIds.scenarioBackendApp)
+  properties: {
+    principalId: appServicePrincipalIds.scenarioBackendApp
+    roleDefinitionId: cosmosContributorRoleDefinition.id
+    scope: cosmosAccount.id
+  }
+}
+
 // ============================================================================
 // 4. DEPLOYER (USER) ROLE ASSIGNMENTS
 //    Deploying user → AI Services, Search, Cosmos DB (Bicep-only)

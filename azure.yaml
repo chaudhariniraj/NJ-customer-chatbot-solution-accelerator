@@ -10,28 +10,28 @@ hooks:
   preprovision:
     windows:
       shell: pwsh
-      run: ./infra_basic/scripts/preflight_scenario.ps1
+      run: ./infra/scripts/pre-provision/preflight_scenario.ps1
       continueOnError: false
       interactive: false
     posix:
       shell: pwsh
-      run: ./infra_basic/scripts/preflight_scenario.ps1
+      run: ./infra/scripts/pre-provision/preflight_scenario.ps1
       continueOnError: false
       interactive: false
   postprovision:
     windows:
       shell: pwsh
-      run: ./infra_basic/scripts/postprovision_all.ps1
+      run: ./infra/scripts/post-provision/postprovision_all.ps1
       continueOnError: false
       interactive: false
     posix:
       shell: sh
-      run: chmod +x ./infra_basic/scripts/postprovision_all.sh && ./infra_basic/scripts/postprovision_all.sh
+      run: chmod +x ./infra/scripts/post-provision/postprovision_all.sh && ./infra/scripts/post-provision/postprovision_all.sh
       continueOnError: false
       interactive: false
 
 infra:
-  path: infra_basic
+  path: infra
 
 services:
   chat-backend:

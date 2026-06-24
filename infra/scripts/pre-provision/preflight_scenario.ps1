@@ -11,7 +11,7 @@ if ($valid -notcontains $scenario) {
     throw "Invalid AZURE_ENV_SCENARIO '$scenario'. Use: ecommerce, healthcare, or banking."
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
 $manifestPath = Join-Path $repoRoot 'scenarios' $scenario 'manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath)) {
     throw "Scenario pack not found: $manifestPath"

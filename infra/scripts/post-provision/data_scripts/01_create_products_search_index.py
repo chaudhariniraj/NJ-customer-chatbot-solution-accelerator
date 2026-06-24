@@ -27,7 +27,7 @@ args = p.parse_args()
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from scenarios.scenario_loader import catalog_csv_path, load_manifest, resolve_scenario
 
 scenario = resolve_scenario(args.scenario)

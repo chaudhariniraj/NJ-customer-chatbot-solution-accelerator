@@ -52,6 +52,8 @@ param tags object = {}
   'eastus2'
   'francecentral'
   'swedencentral'
+  'centralus'
+  'southindia'
 ])
 @metadata({
   azd: {
@@ -322,3 +324,4 @@ output CHAT_API_APP_NAME string = isAvm ? avmDeployment!.outputs.CHAT_API_APP_NA
 output CHAT_WEB_APP_NAME string = isAvm ? avmDeployment!.outputs.CHAT_WEB_APP_NAME : bicepDeployment!.outputs.CHAT_WEB_APP_NAME
 output SCENARIO_API_APP_NAME string = isAvm ? avmDeployment!.outputs.SCENARIO_API_APP_NAME : bicepDeployment!.outputs.SCENARIO_API_APP_NAME
 output SCENARIO_WEB_APP_NAME string = isAvm ? avmDeployment!.outputs.SCENARIO_WEB_APP_NAME : bicepDeployment!.outputs.SCENARIO_WEB_APP_NAME
+output AZURE_ENV_SCENARIO string = deploymentScenario

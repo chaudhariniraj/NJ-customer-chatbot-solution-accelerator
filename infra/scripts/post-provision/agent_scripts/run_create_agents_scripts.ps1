@@ -359,7 +359,8 @@ if ($originalFoundryPublicAccess -eq "Disabled") {
 # Execute the Python scripts within try/finally to ensure network settings are restored on error
 try {
     Write-Host "Running Python agents creation script..."
-    $pythonLines = @(python infra/scripts/agent_scripts/01_create_agents.py --ai_project_endpoint="$projectEndpoint" --solution_name="$solutionName" --gpt_model_name="$gptModelName" --ai_search_endpoint="$searchEndpoint" --scenario="$deploymentScenario" 2>&1)
+    $pythonLines = @(python infra/scripts/post-provision/agent_scripts/01_create_agents.py --ai_project_endpoint="$projectEndpoint" --solution_name="$solutionName" --gpt_model_name="$gptModelName" --ai_search_endpoint="$searchEndpoint" --scenario="$deploymentScenario" 2>&1)
+    Write-Host ($pythonLines | Out-String)
     if ($LASTEXITCODE -ne 0) {
         throw "Python agent creation script failed with exit code $LASTEXITCODE"
     }

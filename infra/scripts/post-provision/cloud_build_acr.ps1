@@ -17,7 +17,7 @@ $reg = $env:ACR_NAME
 if ([string]::IsNullOrWhiteSpace($reg)) { throw 'ACR_NAME missing after provision.' }
 $rg = $env:RESOURCE_GROUP_NAME
 if ([string]::IsNullOrWhiteSpace($rg)) { throw 'RESOURCE_GROUP_NAME missing after provision.' }
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
 
 $rChatBe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_CHAT_BACKEND_IMAGE_REPO)) { 'chat-backend' } else { $env:AZURE_ENV_CHAT_BACKEND_IMAGE_REPO })
 $rChatFe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_CHAT_FRONTEND_IMAGE_REPO)) { 'chat-frontend' } else { $env:AZURE_ENV_CHAT_FRONTEND_IMAGE_REPO })

@@ -46,6 +46,8 @@ param tags object = {}
   'eastus2'
   'francecentral'
   'swedencentral'
+  'centralus'
+  'southindia'
 ])
 @metadata({
   azd: {
@@ -798,25 +800,25 @@ module chat_backend_app './modules/compute/app-service.bicep' = {
     enableTelemetry: enableTelemetry
     diagnosticSettings: monitoringDiagnosticSettings
     applicationInsightResourceId: enableMonitoring ? app_insights!.outputs.resourceId : ''
-    publicNetworkAccess: enablePrivateNetworking ? 'Disabled' : 'Enabled'
+    publicNetworkAccess: 'Enabled' // enablePrivateNetworking ? 'Disabled' : 'Enabled'
     virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : ''
     vnetRouteAllEnabled: true
     imagePullTraffic: enablePrivateNetworking
-    privateEndpoints: enablePrivateNetworking
-      ? [
-          {
-            name: 'pep-chat-api-${solutionSuffix}'
-            customNetworkInterfaceName: 'nic-chat-api-${solutionSuffix}'
-            privateDnsZoneGroup: {
-              privateDnsZoneGroupConfigs: [
-                { privateDnsZoneResourceId: privateDnsZoneDeployments[dnsZoneIndex.webApp]!.outputs.resourceId }
-              ]
-            }
-            service: 'sites'
-            subnetResourceId: virtualNetwork!.outputs.backendSubnetResourceId
-          }
-        ]
-      : []
+    // privateEndpoints: enablePrivateNetworking
+    //   ? [
+    //       {
+    //         name: 'pep-chat-api-${solutionSuffix}'
+    //         customNetworkInterfaceName: 'nic-chat-api-${solutionSuffix}'
+    //         privateDnsZoneGroup: {
+    //           privateDnsZoneGroupConfigs: [
+    //             { privateDnsZoneResourceId: privateDnsZoneDeployments[dnsZoneIndex.webApp]!.outputs.resourceId }
+    //           ]
+    //         }
+    //         service: 'sites'
+    //         subnetResourceId: virtualNetwork!.outputs.backendSubnetResourceId
+    //       }
+    //     ]
+    //   : []
     appSettings: {
       AZURE_OPENAI_DEPLOYMENT_MODEL: gptModelName
       AZURE_OPENAI_ENDPOINT: aiFoundryEndpoint
@@ -885,8 +887,8 @@ module chat_frontend_app './modules/compute/app-service.bicep' = {
     serverFarmResourceId: hostingplan.outputs.resourceId
     appSettings: {
       NODE_ENV: 'production'
-      VITE_API_BASE_URL: enablePrivateNetworking ? '' : chat_backend_app.outputs.appUrl
-      BACKEND_API_URL: enablePrivateNetworking ? chat_backend_app.outputs.appUrl : ''
+      VITE_API_BASE_URL: chat_backend_app.outputs.appUrl // enablePrivateNetworking ? '' : chat_backend_app.outputs.appUrl
+      // BACKEND_API_URL: enablePrivateNetworking ? chat_backend_app.outputs.appUrl : ''
       DEPLOYMENT_SCENARIO: deploymentScenario
       VITE_SCENARIO: deploymentScenario
       CHAT_WELCOME_TITLE: chatWelcomeTitle
@@ -912,25 +914,25 @@ module scenario_backend_app './modules/compute/app-service.bicep' = {
     enableTelemetry: enableTelemetry
     diagnosticSettings: monitoringDiagnosticSettings
     applicationInsightResourceId: enableMonitoring ? app_insights!.outputs.resourceId : ''
-    publicNetworkAccess: enablePrivateNetworking ? 'Disabled' : 'Enabled'
+    publicNetworkAccess: 'Enabled' //enablePrivateNetworking ? 'Disabled' : 'Enabled'
     virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : ''
     vnetRouteAllEnabled: true
     imagePullTraffic: enablePrivateNetworking
-    privateEndpoints: enablePrivateNetworking
-      ? [
-          {
-            name: 'pep-scenario-api-${solutionSuffix}'
-            customNetworkInterfaceName: 'nic-scenario-api-${solutionSuffix}'
-            privateDnsZoneGroup: {
-              privateDnsZoneGroupConfigs: [
-                { privateDnsZoneResourceId: privateDnsZoneDeployments[dnsZoneIndex.webApp]!.outputs.resourceId }
-              ]
-            }
-            service: 'sites'
-            subnetResourceId: virtualNetwork!.outputs.backendSubnetResourceId
-          }
-        ]
-      : []
+    // privateEndpoints: enablePrivateNetworking
+    //   ? [
+    //       {
+    //         name: 'pep-scenario-api-${solutionSuffix}'
+    //         customNetworkInterfaceName: 'nic-scenario-api-${solutionSuffix}'
+    //         privateDnsZoneGroup: {
+    //           privateDnsZoneGroupConfigs: [
+    //             { privateDnsZoneResourceId: privateDnsZoneDeployments[dnsZoneIndex.webApp]!.outputs.resourceId }
+    //           ]
+    //         }
+    //         service: 'sites'
+    //         subnetResourceId: virtualNetwork!.outputs.backendSubnetResourceId
+    //       }
+    //     ]
+    //   : []
     appSettings: {
       AZURE_OPENAI_DEPLOYMENT_MODEL: gptModelName
       AZURE_OPENAI_ENDPOINT: aiFoundryEndpoint
@@ -1001,9 +1003,9 @@ module scenario_frontend_app './modules/compute/app-service.bicep' = {
     imagePullTraffic: enablePrivateNetworking
     appSettings: {
       NODE_ENV: 'production'
-      VITE_API_BASE_URL: enablePrivateNetworking ? '' : scenario_backend_app.outputs.appUrl
+      VITE_API_BASE_URL: scenario_backend_app.outputs.appUrl // enablePrivateNetworking ? '' : scenario_backend_app.outputs.appUrl
       VITE_CHAT_API_BASE_URL: chat_backend_app.outputs.appUrl
-      BACKEND_API_URL: enablePrivateNetworking ? scenario_backend_app.outputs.appUrl : ''
+      // BACKEND_API_URL: enablePrivateNetworking ? scenario_backend_app.outputs.appUrl : ''
       DEPLOYMENT_SCENARIO: deploymentScenario
       VITE_SCENARIO: deploymentScenario
       VITE_HOST_APP_TITLE: hostAppTitle
@@ -1027,7 +1029,10 @@ module role_assignments './modules/identity/role-assignments.bicep' = {
     aiSearchResourceId: ai_search.outputs.resourceId
     aiProjectPrincipalId: aiProjectPrincipalId
     aiSearchPrincipalId: ai_search.outputs.identityPrincipalId
-    backendAppServicePrincipalId: chat_backend_app.outputs.identityPrincipalId
+    appServicePrincipalIds: {
+      chatBackendApp: chat_backend_app.outputs.identityPrincipalId
+      scenarioBackendApp: scenario_backend_app.outputs.identityPrincipalId
+    }
     deployerPrincipalId: deployingUserPrincipalId
     cosmosDbAccountName: cosmosDBModule.outputs.name
   }
