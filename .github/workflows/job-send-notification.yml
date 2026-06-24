@@ -68,7 +68,6 @@ on:
         type: string
 
 env:
-  GPT_MIN_CAPACITY: ${{ vars.GPT_MIN_CAPACITY || 10 }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   DEPLOYMENT_FLAVOR: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.deployment_flavor || 'bicep') || 'bicep' }}
   EXP: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.EXP || false) || false }}
