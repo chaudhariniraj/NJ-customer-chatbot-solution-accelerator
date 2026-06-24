@@ -57,6 +57,7 @@ on:
 
 jobs:
   deploy-windows:
+    name: Deploy on Windows
     runs-on: windows-latest
     environment: production
     env:

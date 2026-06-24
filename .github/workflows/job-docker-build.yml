@@ -17,6 +17,7 @@ env:
 
 jobs:
   docker-build:
+    name: Build and Push Custom Docker Images
     runs-on: ubuntu-latest
     environment: production
     outputs:

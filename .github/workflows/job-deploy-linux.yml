@@ -57,6 +57,7 @@ on:
 
 jobs:
   deploy-linux:
+    name: Deploy on Linux
     runs-on: ubuntu-latest
     environment: production
     env:
