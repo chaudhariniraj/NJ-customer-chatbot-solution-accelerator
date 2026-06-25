@@ -6,4 +6,4 @@ chmod +x "$HERE/sync_azd_hook_env.sh" 2>/dev/null || true
 chmod +x "$HERE/postprovision_data_agents.sh" 2>/dev/null || true
 source "$HERE/sync_azd_hook_env.sh"
 "$HERE/cloud_build_acr.sh"
-"$HERE/postprovision_data_agents.sh"
+# "$HERE/postprovision_data_agents.sh"
