@@ -761,6 +761,9 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = container_registry.outputs.log
 @description('Name of the Azure Container Registry.')
 output ACR_NAME string = container_registry.outputs.name
 
+@description('Docker image tag used for app deployments.')
+output AZURE_ENV_IMAGETAG string = imageTag
+
 @description('Name of the chat backend API App Service.')
 output API_APP_NAME string = chat_backend_app.outputs.name
 
