@@ -210,7 +210,12 @@ jobs:
           fi
           
           # Validate cleanup_resources (boolean)
-          CLEANUP_RESOURCES="${INPUT_CLEANUP_RESOURCES:-false}"
+          # Auto triggers (workflow_run, schedule) default to true; manual dispatch defaults to false
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            CLEANUP_RESOURCES="${INPUT_CLEANUP_RESOURCES:-true}"
+          else
+            CLEANUP_RESOURCES="${INPUT_CLEANUP_RESOURCES:-false}"
+          fi
           if [[ "$CLEANUP_RESOURCES" != "true" && "$CLEANUP_RESOURCES" != "false" ]]; then
             echo "❌ ERROR: cleanup_resources must be 'true' or 'false', got: '$CLEANUP_RESOURCES'"
             VALIDATION_FAILED=true
