@@ -8,10 +8,10 @@ from pydantic_settings import BaseSettings
 _current_dir = Path(__file__).resolve().parent
 _backend_dir = _current_dir.parent
 _env_file_path = _backend_dir / ".env"
-_ecommerce_dir = _backend_dir.parent
-_repo_root_env = _ecommerce_dir.parent / ".env"
+_scenario_app_dir = _backend_dir.parent
+_repo_root_env = _scenario_app_dir.parent / ".env"
 
-for _p in (_repo_root_env, _ecommerce_dir / ".env"):
+for _p in (_repo_root_env, _scenario_app_dir / ".env"):
     if _p.is_file():
         load_dotenv(_p, override=False)
 if _env_file_path.is_file():
@@ -20,7 +20,7 @@ if _env_file_path.is_file():
 
 class Settings(BaseSettings):
     # Application
-    app_name: str = "E-commerce API"
+    app_name: str = "Scenario API"
     app_version: str = "1.0.0"
     debug: bool = False
 

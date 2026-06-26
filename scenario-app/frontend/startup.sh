@@ -3,9 +3,9 @@
 if [ -z "$VITE_API_BASE_URL" ]; then
   host="${WEBSITE_HOSTNAME:-}"
   case "$host" in
-    app-ecom-*.*)
-      suf="${host#app-ecom-}"
-      VITE_API_BASE_URL="https://api-ecom-${suf}"
+    app-scenario-*.*)
+      suf="${host#app-scenario-}"
+      VITE_API_BASE_URL="https://api-scenario-${suf}"
       ;;
   esac
 fi
@@ -13,8 +13,8 @@ fi
 if [ -z "$VITE_CHAT_API_BASE_URL" ]; then
   host="${WEBSITE_HOSTNAME:-}"
   case "$host" in
-    app-ecom-*.*)
-      suf="${host#app-ecom-}"
+    app-scenario-*.*)
+      suf="${host#app-scenario-}"
       VITE_CHAT_API_BASE_URL="https://api-chat-${suf}"
       ;;
   esac

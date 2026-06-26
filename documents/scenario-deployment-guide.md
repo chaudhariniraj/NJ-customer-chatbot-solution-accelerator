@@ -34,7 +34,7 @@ Sync-AzdHookEnv -ProjectRoot (Get-Location)
 
 | Layer | Behavior |
 |-------|----------|
-| Host UI (`ecommerce-app/frontend`) | Product grid, hospital services, or banking products |
+| Host UI (`scenario-app/frontend`) | Product grid, hospital services, or banking products |
 | Host API | `/api/products` (retail), `/api/services` + `/api/appointments` (healthcare), `/api/accounts` + `/api/banking/transactions` (banking) |
 | Chat widget UI | Same layout; welcome text from `/api/chat/config` |
 | Foundry agents | Scenario instructions + Search indexes from `scenarios/{scenario}/` |

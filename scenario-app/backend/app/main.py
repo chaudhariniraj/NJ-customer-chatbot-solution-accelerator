@@ -58,9 +58,9 @@ else:
 
 # Create FastAPI app
 app = FastAPI(
-    title="E-commerce API",
+    title="Scenario API",
     version="1.0.0",
-    description="E-commerce platform with product browsing, cart management, and order processing",
+    description="Multi-scenario host API for product browsing, cart management, and order processing",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -114,11 +114,11 @@ elif _scenario == "banking":
 async def read_root():
     """Root endpoint with API information"""
     return {
-        "message": "Welcome to E-commerce API!",
+        "message": "Welcome to Scenario API!",
         "version": "1.0.0",
         "docs": "/docs",
         "status": "healthy",
-        "service": "ecommerce"
+        "service": _scenario
     }
 
 
@@ -127,7 +127,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "service": "ecommerce",
+        "service": _scenario,
         "database": "connected" if settings.cosmos_db_endpoint else "not_configured",
         "search": "configured" if settings.azure_search_endpoint else "not_configured",
         "auth": "configured" if settings.azure_client_id else "not_configured",
@@ -141,7 +141,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     logger.error(f"HTTP {exc.status_code} error at {request.url}: {exc.detail}")
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail, "service": "ecommerce"},
+        content={"detail": exc.detail, "service": _scenario},
     )
 
 
@@ -151,7 +151,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unexpected error at {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "service": "ecommerce"},
+        content={"detail": "Internal server error", "service": _scenario},
     )
 
 

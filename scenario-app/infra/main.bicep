@@ -113,11 +113,11 @@ param containerRegistryEndpoint string = 'ccbcontainerreg.azurecr.io'
 @description('Optional. The image tag to use for container images. Defaults to "latest_v2".')
 param imageTag string = 'latest_v2'
 
-@description('ACR repository name for the frontend container image (e-commerce UI).')
-param frontendImageRepository string = 'ccsa-ecom-frontend'
+@description('ACR repository name for the frontend container image (scenario host UI).')
+param frontendImageRepository string = 'scenario-frontend'
 
-@description('ACR repository name for the backend container image (e-commerce API).')
-param backendImageRepository string = 'ccsa-ecom-backend'
+@description('ACR repository name for the backend container image (scenario host API).')
+param backendImageRepository string = 'scenario-backend'
 
 @description('Optional. Enable/Disable usage telemetry for module.')
 param enableTelemetry bool = true

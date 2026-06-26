@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 
 from ..auth import get_current_user
 from ..database import get_db_service
+from ..scenario_config import current_scenario
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ async def debug_auth_headers(request: Request):
     easy_auth_headers = {k: v for k, v in headers.items() if "x-ms-client" in k.lower()}
 
     return {
-        "service": "ecommerce",
+        "service": current_scenario(),
         "all_headers": headers,
         "easy_auth_headers": easy_auth_headers,
         "has_easy_auth": len(easy_auth_headers) > 0,
@@ -60,7 +61,7 @@ async def get_current_user_info(request: Request):
                 "roles": current_user["roles"],
                 "is_authenticated": False,
                 "is_guest": True,
-                "service": "ecommerce"
+                "service": current_scenario()
             }
             logger.info(f"🛒 /api/auth/me: Returning guest customer data: {guest_response}")
             return guest_response
@@ -89,7 +90,7 @@ async def get_current_user_info(request: Request):
             "is_authenticated": True,
             "is_guest": False,
             "customer_profile": customer,
-            "service": "ecommerce"
+            "service": current_scenario()
         }
 
     except Exception as e:
@@ -107,7 +108,7 @@ async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
             # For now, just return success - actual logout handled by frontend
             logger.info(f"🛒 Customer logout: {user_id}")
 
-        return {"message": "Logout successful", "service": "ecommerce"}
+        return {"message": "Logout successful", "service": current_scenario()}
     except Exception as e:
         logger.exception(f"🛒 Logout error: {e}")
         raise HTTPException(status_code=500, detail=f"Logout error: {str(e)}")
@@ -125,7 +126,7 @@ async def get_customer_profile(current_user: Dict[str, Any] = Depends(get_curren
             return {
                 "message": "Guest user - no profile available",
                 "is_guest": True,
-                "service": "ecommerce"
+                "service": current_scenario()
             }
 
         # Get customer profile
@@ -139,7 +140,7 @@ async def get_customer_profile(current_user: Dict[str, Any] = Depends(get_curren
         return {
             "customer": customer,
             "recent_orders": orders,
-            "service": "ecommerce"
+            "service": current_scenario()
         }
 
     except HTTPException:

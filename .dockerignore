@@ -16,5 +16,5 @@ infra_basic/
 src/
 tests/
 chat-app/backend/
-ecommerce-app/backend/
+scenario-app/backend/
 data/

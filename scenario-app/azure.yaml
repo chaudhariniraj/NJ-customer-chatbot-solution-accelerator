@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
-name: customer-chatbot-ecommerce
+name: customer-chatbot-scenario
 metadata:
-  template: customer-chatbot-ecommerce@1.0
+  template: customer-chatbot-scenario@1.0
 
 requiredVersions:
   azd: ">= 1.18.0 != 1.23.9"
@@ -11,7 +11,7 @@ hooks:
     windows:
       run: |
         Write-Host "`n========================================" -ForegroundColor Green
-        Write-Host " E-commerce deployment complete" -ForegroundColor Green
+        Write-Host " Scenario deployment complete" -ForegroundColor Green
         Write-Host "========================================`n" -ForegroundColor Green
         Write-Host "Web app URL:" -ForegroundColor Cyan
         Write-Host "$env:WEB_APP_URL"
@@ -24,7 +24,7 @@ hooks:
       run: |
         echo ""
         echo "========================================"
-        echo " E-commerce deployment complete"
+        echo " Scenario deployment complete"
         echo "========================================"
         echo ""
         echo "Web app URL:"

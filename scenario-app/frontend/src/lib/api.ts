@@ -4,10 +4,10 @@ function isLoopbackApiUrl(url: string): boolean {
   return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/i.test(url.trim());
 }
 
-function inferEcomAzureApiBase(hostname: string): string {
+function inferScenarioAzureApiBase(hostname: string): string {
   if (!hostname.endsWith('.azurewebsites.net')) return '';
-  if (!hostname.startsWith('app-ecom-')) return '';
-  return `https://api-ecom-${hostname.slice('app-ecom-'.length)}`;
+  if (!hostname.startsWith('app-scenario-')) return '';
+  return `https://api-scenario-${hostname.slice('app-scenario-'.length)}`;
 }
 
 export const getApiBaseUrl = (): string => {
@@ -25,7 +25,7 @@ export const getApiBaseUrl = (): string => {
     if (fromBuild && !(onAzureFe && isLoopbackApiUrl(fromBuild))) {
       return fromBuild;
     }
-    const inferred = inferEcomAzureApiBase(host);
+    const inferred = inferScenarioAzureApiBase(host);
     if (inferred) return inferred;
     if (import.meta.env.DEV) {
       return fromBuild || 'http://localhost:8000';

@@ -4,7 +4,7 @@
 param(
     [string]$Registry = $env:AZURE_ENV_ACR_NAME,
     [string]$ImageTag = $env:AZURE_ENV_IMAGETAG,
-    [string]$Repository = $(if ($env:AZURE_ENV_BACKEND_IMAGE_REPO) { $env:AZURE_ENV_BACKEND_IMAGE_REPO } else { 'ccsa-ecom-backend' })
+    [string]$Repository = $(if ($env:AZURE_ENV_BACKEND_IMAGE_REPO) { $env:AZURE_ENV_BACKEND_IMAGE_REPO } else { 'scenario-backend' })
 )
 
 $ErrorActionPreference = 'Stop'

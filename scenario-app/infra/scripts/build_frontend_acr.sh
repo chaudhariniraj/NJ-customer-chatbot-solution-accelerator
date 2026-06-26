@@ -3,7 +3,7 @@ set -euo pipefail
 
 REGISTRY="${REGISTRY:-${AZURE_ENV_ACR_NAME:-}}"
 IMAGE_TAG="${IMAGE_TAG:-${AZURE_ENV_IMAGETAG:-latest_v2}}"
-REPO="${REPO:-${AZURE_ENV_FRONTEND_IMAGE_REPO:-ccsa-ecom-frontend}}"
+REPO="${REPO:-${AZURE_ENV_FRONTEND_IMAGE_REPO:-scenario-frontend}}"
 
 if [[ -z "$REGISTRY" && -n "${AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT:-}" ]]; then
   REGISTRY="${AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT%.azurecr.io}"

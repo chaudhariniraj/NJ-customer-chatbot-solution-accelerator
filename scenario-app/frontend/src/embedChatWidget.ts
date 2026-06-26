@@ -35,7 +35,7 @@ export function embedChatWidget() {
       script.src,
       import.meta.env.DEV
         ? 'Build the widget: cd chat-app/frontend && npm run build'
-        : 'Redeploy ccsa-ecom-frontend from repo root (see ecommerce-app/frontend/Dockerfile).',
+        : 'Redeploy scenario-frontend from repo root (see scenario-app/frontend/Dockerfile).',
     );
   });
   script.addEventListener('load', () => {

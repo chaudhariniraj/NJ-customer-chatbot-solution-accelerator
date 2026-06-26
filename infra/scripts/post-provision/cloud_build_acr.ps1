@@ -21,15 +21,15 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..')).Path
 
 $rChatBe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_CHAT_BACKEND_IMAGE_REPO)) { 'chat-backend' } else { $env:AZURE_ENV_CHAT_BACKEND_IMAGE_REPO })
 $rChatFe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_CHAT_FRONTEND_IMAGE_REPO)) { 'chat-frontend' } else { $env:AZURE_ENV_CHAT_FRONTEND_IMAGE_REPO })
-$rEcomBe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_ECOMMERCE_BACKEND_IMAGE_REPO)) { 'scenario-backend' } else { $env:AZURE_ENV_ECOMMERCE_BACKEND_IMAGE_REPO })
-$rEcomFe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_ECOMMERCE_FRONTEND_IMAGE_REPO)) { 'scenario-frontend' } else { $env:AZURE_ENV_ECOMMERCE_FRONTEND_IMAGE_REPO })
+$rScenarioBe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_SCENARIO_BACKEND_IMAGE_REPO)) { 'scenario-backend' } else { $env:AZURE_ENV_SCENARIO_BACKEND_IMAGE_REPO })
+$rScenarioFe = $(if ([string]::IsNullOrWhiteSpace($env:AZURE_ENV_SCENARIO_FRONTEND_IMAGE_REPO)) { 'scenario-frontend' } else { $env:AZURE_ENV_SCENARIO_FRONTEND_IMAGE_REPO })
 
-$ecomFeDockerfile = Join-Path $repoRoot 'ecommerce-app' 'frontend' 'Dockerfile'
+$scenarioFeDockerfile = Join-Path $repoRoot 'scenario-app' 'frontend' 'Dockerfile'
 $builds = @(
   @{ Repo = $rChatBe; Ctx = (Join-Path $repoRoot 'chat-app' 'backend') }
   @{ Repo = $rChatFe; Ctx = (Join-Path $repoRoot 'chat-app' 'frontend') }
-  @{ Repo = $rEcomBe; Ctx = (Join-Path $repoRoot 'ecommerce-app' 'backend') }
-  @{ Repo = $rEcomFe; Ctx = $repoRoot; Dockerfile = $ecomFeDockerfile }
+  @{ Repo = $rScenarioBe; Ctx = (Join-Path $repoRoot 'scenario-app' 'backend') }
+  @{ Repo = $rScenarioFe; Ctx = $repoRoot; Dockerfile = $scenarioFeDockerfile }
 )
 
 foreach ($b in $builds) {
@@ -45,7 +45,7 @@ foreach ($b in $builds) {
   }
   $imageRef = "$($b.Repo):$tag"
   $buildArgs = @()
-  if ($b.Repo -eq $rEcomFe) {
+  if ($b.Repo -eq $rScenarioFe) {
     $buildArgs = @('--build-arg', "VITE_SCENARIO=$scenario")
   }
   Write-Host "az acr build (cwd=$ctxFull) --registry `"$reg`" --image `"$imageRef`" --file $dockerfileArg --platform linux --no-logs ."
