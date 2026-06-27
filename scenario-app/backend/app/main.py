@@ -28,16 +28,15 @@ logging.getLogger("app.auth").setLevel(logging.WARNING)
 
 # Handle both local debugging and Docker deployment
 try:
-    # Try relative imports first (for Docker)
     from .auth import get_current_user
     from .config import settings
-    from .routers import auth, cart, products, orders
+    from .routers import auth
     from .scenario_config import current_scenario
 except ImportError:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from app.auth import get_current_user
     from app.config import settings
-    from app.routers import auth, cart, products, orders
+    from app.routers import auth
     from app.scenario_config import current_scenario
 
 # Get logger for this module (logging already configured above)
@@ -87,13 +86,10 @@ app.add_middleware(
 )
 app.add_middleware(_FixCredentialedCorsMiddleware)
 
-# Include routers
-app.include_router(auth.router)
-app.include_router(products.router)
-app.include_router(cart.router)
-app.include_router(orders.router)
-
 _scenario = current_scenario()
+
+app.include_router(auth.router)
+
 if _scenario == "healthcare":
     try:
         from .routers import healthcare, healthcare_appointments
@@ -108,6 +104,14 @@ elif _scenario == "banking":
         from app.routers import banking, banking_transactions
     app.include_router(banking.router)
     app.include_router(banking_transactions.router)
+else:
+    try:
+        from .routers import cart, orders, products
+    except ImportError:
+        from app.routers import cart, orders, products
+    app.include_router(products.router)
+    app.include_router(cart.router)
+    app.include_router(orders.router)
 
 
 @app.get("/")
