@@ -9,7 +9,7 @@ Go to https://portal.azure.com
 ### 2. Search for Azure AI Foundry
 In the search bar at the top, type "Azure AI Foundry" and click on it. Then select the Foundry service instance where your project exists.
 
-![alt text](./Images/re_use_foundry_project/azure_ai_foundry_list.png)
+![alt text](./Images/re_use_foundry_project/azure_ai_foundry_listUpdated.png)
 
 ### 3. Navigate to Projects under Resource Management
 On the left sidebar of the Foundry service blade:
