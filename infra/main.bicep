@@ -1106,7 +1106,6 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
           }
         ]
       : []
-    trustPolicyStatus: enableScalability ? 'enabled' : 'disabled'
     // networkRuleBypassOptions and networkRuleSet are Premium-only; suppress them on Basic.
     // The AVM module emits a networkRuleSet whenever defaultAction is 'Deny' (its default) with public access enabled,
     // which ARM rejects with 'NetworkRuleNotSupported' on the Basic SKU.
