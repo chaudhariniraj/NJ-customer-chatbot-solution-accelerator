@@ -251,9 +251,5 @@ else
     echo "Skipping frontend (--skip-frontend)."
 fi
 
-if azd_available; then
-    azd env set AZURE_ENV_IMAGETAG "$IMAGE_TAG" >/dev/null 2>&1 || true
-fi
-
 echo ""
 echo "Done. Images published with tag '$IMAGE_TAG'."

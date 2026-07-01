@@ -262,10 +262,5 @@ if (-not $SkipFrontend) {
     Write-Host "Skipping frontend (SkipFrontend)." -ForegroundColor Yellow
 }
 
-# Persist tag for downstream tooling
-if (Test-CommandAvailable 'azd') {
-    azd env set AZURE_ENV_IMAGETAG $ImageTag 2>$null | Out-Null
-}
-
 Write-Host ""
 Write-Host "Done. Images published with tag '$ImageTag'." -ForegroundColor Green
