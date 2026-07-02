@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.41.2.15936",
-      "templateHash": "2574382786757169667"
+      "version": "0.44.1.10279",
+      "templateHash": "147857860767273862"
     }
   },
   "parameters": {
@@ -4420,8 +4420,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "11110757456691376710"
+              "version": "0.44.1.10279",
+              "templateHash": "2849507372770088273"
             }
           },
           "definitions": {
@@ -23733,8 +23733,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1108363872642748299"
+              "version": "0.44.1.10279",
+              "templateHash": "8568566718267872283"
             }
           },
           "definitions": {
@@ -24005,7 +24005,6 @@
               "Cognitive Services User": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')]",
               "Azure AI Developer": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')]",
               "Contributor": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
-              "Owner": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8e3af657-a8ff-443c-a75c-2fe8c4bcb635')]",
               "Reader": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
               "Role Based Access Control Administrator": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'f58310d9-a9f6-439a-9e8d-f62e7b41a168')]",
               "User Access Administrator": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9')]"
@@ -29448,8 +29447,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "14729770453662118856"
+              "version": "0.44.1.10279",
+              "templateHash": "16317798960303151173"
             }
           },
           "parameters": {
@@ -29548,8 +29547,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "3417037242619406993"
+              "version": "0.44.1.10279",
+              "templateHash": "2149106343155409330"
             }
           },
           "parameters": {
@@ -36442,8 +36441,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1965463467367942079"
+              "version": "0.44.1.10279",
+              "templateHash": "2130390278067469090"
             }
           },
           "definitions": {
@@ -37449,8 +37448,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.41.2.15936",
-                      "templateHash": "402304462716062324"
+                      "version": "0.44.1.10279",
+                      "templateHash": "11396997819988145476"
                     },
                     "name": "Site App Settings",
                     "description": "This module deploys a Site App Setting."
@@ -38372,8 +38371,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1783553076065298345"
+              "version": "0.44.1.10279",
+              "templateHash": "7567212470980778854"
             }
           },
           "parameters": {
@@ -38492,8 +38491,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1783553076065298345"
+              "version": "0.44.1.10279",
+              "templateHash": "7567212470980778854"
             }
           },
           "parameters": {
@@ -38606,8 +38605,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1783553076065298345"
+              "version": "0.44.1.10279",
+              "templateHash": "7567212470980778854"
             }
           },
           "parameters": {
@@ -38723,8 +38722,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1783553076065298345"
+              "version": "0.44.1.10279",
+              "templateHash": "7567212470980778854"
             }
           },
           "parameters": {
@@ -38841,8 +38840,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1783553076065298345"
+              "version": "0.44.1.10279",
+              "templateHash": "7567212470980778854"
             }
           },
           "parameters": {
@@ -38996,8 +38995,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.41.2.15936",
-              "templateHash": "1965463467367942079"
+              "version": "0.44.1.10279",
+              "templateHash": "2130390278067469090"
             }
           },
           "definitions": {
@@ -40003,8 +40002,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.41.2.15936",
-                      "templateHash": "402304462716062324"
+                      "version": "0.44.1.10279",
+                      "templateHash": "11396997819988145476"
                     },
                     "name": "Site App Settings",
                     "description": "This module deploys a Site App Setting."
