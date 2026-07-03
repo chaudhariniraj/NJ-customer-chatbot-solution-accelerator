@@ -77,8 +77,12 @@ azd_available() { command -v azd >/dev/null 2>&1; }
 azd_get() {
     local key="$1" value=""
     azd_available || return 0
-    value="$(azd env get-value "$key" 2>/dev/null || true)"
-    [[ "$value" == ERROR:* ]] && value=""
+    # A missing key makes azd exit non-zero (and may print an error to stdout);
+    # treat that as "not set" so callers fall back to their defaults.
+    value="$(azd env get-value "$key" 2>/dev/null)" || return 0
+    case "$value" in
+        *ERROR:*|*"not found in environment"*) return 0 ;;
+    esac
     printf '%s' "$value"
 }
 
@@ -192,8 +196,8 @@ update_webapp() {
 # Resolve inputs
 # ---------------------------------------------------------------------------
 [[ -z "$RESOURCE_GROUP" ]] && RESOURCE_GROUP="$(azd_get AZURE_RESOURCE_GROUP)"
-[[ -z "$ACR_NAME"       ]] && ACR_NAME="$(azd_get ACR_NAME)"
 [[ -z "$ACR_NAME"       ]] && ACR_NAME="$(azd_get AZURE_CONTAINER_REGISTRY_NAME)"
+[[ -z "$ACR_NAME"       ]] && ACR_NAME="$(azd_get ACR_NAME)"
 [[ -z "$BACKEND_APP"    ]] && BACKEND_APP="$(azd_get API_APP_NAME)"
 SOLUTION_SUFFIX="$(azd_get SOLUTION_NAME)"
 [[ -z "$FRONTEND_APP" && -n "$SOLUTION_SUFFIX" ]] && FRONTEND_APP="app-${SOLUTION_SUFFIX}"
@@ -204,7 +208,7 @@ if [[ -z "$ACR_NAME" || -z "$BACKEND_APP" || -z "$FRONTEND_APP" ]]; then
     echo "Fetching deployment outputs from '$RESOURCE_GROUP'..."
     OUTPUTS_JSON="$(fetch_deployment_outputs "$RESOURCE_GROUP")"
     if [[ -n "$OUTPUTS_JSON" ]]; then
-        [[ -z "$ACR_NAME"    ]] && ACR_NAME="$(extract_output "$OUTPUTS_JSON" ACR_NAME acrName AZURE_CONTAINER_REGISTRY_NAME azureContainerRegistryName)"
+        [[ -z "$ACR_NAME"    ]] && ACR_NAME="$(extract_output "$OUTPUTS_JSON" AZURE_CONTAINER_REGISTRY_NAME azureContainerRegistryName ACR_NAME acrName)"
         [[ -z "$BACKEND_APP" ]] && BACKEND_APP="$(extract_output "$OUTPUTS_JSON" API_APP_NAME apiAppName)"
         if [[ -z "$SOLUTION_SUFFIX" ]]; then
             SOLUTION_SUFFIX="$(extract_output "$OUTPUTS_JSON" SOLUTION_NAME solutionName)"

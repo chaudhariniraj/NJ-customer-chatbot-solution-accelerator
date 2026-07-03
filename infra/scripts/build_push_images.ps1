@@ -76,7 +76,8 @@ function Get-AzdEnvValue {
     $value = azd env get-value $Key 2>$null
     if ($LASTEXITCODE -ne 0) { return $null }
     if ([string]::IsNullOrWhiteSpace($value)) { return $null }
-    if ($value -match '^ERROR:') { return $null }
+    # Newer azd may print a "key not found" error to stdout for missing keys.
+    if ($value -match 'ERROR:' -or $value -match 'not found in environment') { return $null }
     return $value.Trim()
 }
 
@@ -198,8 +199,8 @@ if (-not (Test-CommandAvailable 'az')) {
 # Resolve inputs
 # ---------------------------------------------------------------------------
 if (-not $ResourceGroup)   { $ResourceGroup   = Get-AzdEnvValue 'AZURE_RESOURCE_GROUP' }
-if (-not $AcrName)         { $AcrName         = Get-AzdEnvValue 'ACR_NAME' }
 if (-not $AcrName)         { $AcrName         = Get-AzdEnvValue 'AZURE_CONTAINER_REGISTRY_NAME' }
+if (-not $AcrName)         { $AcrName         = Get-AzdEnvValue 'ACR_NAME' }
 if (-not $BackendAppName)  { $BackendAppName  = Get-AzdEnvValue 'API_APP_NAME' }
 $solutionSuffix = Get-AzdEnvValue 'SOLUTION_NAME'
 if (-not $FrontendAppName -and $solutionSuffix) { $FrontendAppName = "app-$solutionSuffix" }
@@ -213,7 +214,7 @@ if ($needDeployment) {
     }
     Write-Host "Fetching deployment outputs from resource group '$ResourceGroup'..." -ForegroundColor DarkGray
     $outputs = Get-DeploymentOutputs -Rg $ResourceGroup
-    if (-not $AcrName)        { $AcrName        = Get-OutputValue $outputs @('ACR_NAME','acrName','AZURE_CONTAINER_REGISTRY_NAME','azureContainerRegistryName') }
+    if (-not $AcrName)        { $AcrName        = Get-OutputValue $outputs @('AZURE_CONTAINER_REGISTRY_NAME','azureContainerRegistryName','ACR_NAME','acrName') }
     if (-not $BackendAppName) { $BackendAppName = Get-OutputValue $outputs @('API_APP_NAME','apiAppName') }
     if (-not $solutionSuffix) { $solutionSuffix = Get-OutputValue $outputs @('SOLUTION_NAME','solutionName') }
     if (-not $FrontendAppName -and $solutionSuffix) { $FrontendAppName = "app-$solutionSuffix" }
