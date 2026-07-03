@@ -45,7 +45,7 @@ param secondaryLocation string = 'canadacentral'
 @description('Optional. Name of the GPT model to deploy:')
 param gptModelName string = 'gpt-5.4-mini'
 
-@description('Optional. Version of the GPT model to deploy. Defaults to 2025-04-14.')
+@description('Optional. Version of the GPT model to deploy. Defaults to 2026-03-17.')
 param gptModelVersion string = '2026-03-17'
 
 @description('Optional. Version of the OpenAI API.')
