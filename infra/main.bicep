@@ -605,6 +605,7 @@ var privateDnsZones = [
   'privatelink.documents.azure.com'
   'privatelink.search.windows.net'
   'privatelink.azurewebsites.net'
+  'privatelink.azurecr.io'
 ]
 
 // DNS Zone Index Constants
@@ -615,6 +616,7 @@ var dnsZoneIndex = {
   cosmosDb: 3
   search: 4
   webApp: 5
+  containerRegistry: 4
 }
 
 // List of DNS zone indices that correspond to AI-related services.
@@ -1098,7 +1100,7 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
             customNetworkInterfaceName: 'nic-cr${solutionSuffix}'
             privateDnsZoneGroup: {
               privateDnsZoneGroupConfigs: [
-                { privateDnsZoneResourceId: avmPrivateDnsZones[dnsZoneIndex.cognitiveServices]!.outputs.resourceId }
+                { privateDnsZoneResourceId: avmPrivateDnsZones[dnsZoneIndex.containerRegistry]!.outputs.resourceId }
               ]
             }
             service: 'registry'
