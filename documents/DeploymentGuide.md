@@ -335,7 +335,38 @@ source .venv/bin/activate
 
 ### 5.2 Initialize Data and Agents
 
-**Step 1: Populate Product Catalogs and Search Indexes**
+**Step 1: Build and push container images**
+
+The initial deployment configures the App Services with a placeholder container. Run the ACR build script to build the real backend/frontend images inside Azure Container Registry and point both web apps at them:
+
+- **For PowerShell (Windows/Linux/macOS):**
+    ```shell
+    infra\scripts\build_push_images.ps1
+    ```
+- **For Bash (Linux/macOS/WSL):**
+    ```bash
+    bash ./infra/scripts/build_push_images.sh
+    ```
+
+**If you deployed using `AVM`:**
+
+- **For PowerShell (Windows/Linux/macOS):**
+    ```shell
+    infra\scripts\build_push_images.ps1 -ResourceGroup "<your-resource-group-name>"
+    ```
+- **For Bash (Linux/macOS/WSL):**
+    ```bash
+    bash ./infra/scripts/build_push_images.sh --resource-group "<your-resource-group-name>"
+    ```
+
+This script will:
+- Build the backend (`src/api`) and frontend (`src/App`) images remotely using `az acr build` (no local Docker required)
+- Push them to your Azure Container Registry
+- Update both App Services (`api-<suffix>` and `app-<suffix>`) to run the new image and restart them
+
+> **Tip:** Pass `-ImageTag <tag>` (PowerShell) or `--image-tag <tag>` (bash) to publish a specific tag. Pass `-ShowLogs` / `--show-logs` to stream the full build output. Each run generates a fresh timestamp tag by default.
+
+**Step 2: Populate Product Catalogs and Search Indexes**
 
 Run the data setup script to load sample product data
 
@@ -364,7 +395,7 @@ This script will:
 - Create and configure Azure AI Search indexes
 - Populate search indexes with product and policy documents
 
-**Step 2: Create AI Foundry Agents**
+**Step 3: Create AI Foundry Agents**
 Run the data setup script to load sample product data and create search indexes in Azure AI Search:
 
 - **For PowerShell (Windows/Linux/macOS):**
