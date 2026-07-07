@@ -20,7 +20,7 @@ hooks:
       continueOnError: false
       interactive: false
     posix:
-      shell: bash
+      shell: sh
       run: bash ./infra/scripts/pre-provision/preflight_scenario.sh
       continueOnError: false
       interactive: false
