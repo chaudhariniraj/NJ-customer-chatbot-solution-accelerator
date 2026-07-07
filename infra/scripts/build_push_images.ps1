@@ -199,8 +199,17 @@ function Enable-AcrPublicAccess {
     param([string]$Name)
     Write-Host "Checking ACR public network access for '$Name'..." -ForegroundColor DarkGray
 
-    $script:OriginalAcrPublicAccess  = (az acr show --name $Name --query "publicNetworkAccess"          -o tsv 2>$null).Trim()
-    $script:OriginalAcrDefaultAction = (az acr show --name $Name --query "networkRuleSet.defaultAction" -o tsv 2>$null).Trim()
+    $rawPublicAccess = az acr show --name $Name --query "publicNetworkAccess" -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($rawPublicAccess)) {
+        throw "Failed to read ACR public network access for '$Name' (exit $LASTEXITCODE). Ensure the registry exists and you have sufficient permissions."
+    }
+    $script:OriginalAcrPublicAccess = $rawPublicAccess.Trim()
+
+    $rawDefaultAction = az acr show --name $Name --query "networkRuleSet.defaultAction" -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to read ACR network rule set for '$Name' (exit $LASTEXITCODE)."
+    }
+    $script:OriginalAcrDefaultAction = if ([string]::IsNullOrWhiteSpace($rawDefaultAction)) { '' } else { $rawDefaultAction.Trim() }
     Write-Host "  Current: publicNetworkAccess=$($script:OriginalAcrPublicAccess)  defaultAction=$($script:OriginalAcrDefaultAction)" -ForegroundColor DarkGray
 
     if ($script:OriginalAcrPublicAccess -ne 'Enabled') {
