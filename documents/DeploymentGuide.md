@@ -373,7 +373,7 @@ source .venv/Scripts/activate
 source .venv/bin/activate
 ```
 
-### 5.2 Initialize Data and Agents
+### 5.2 Build Container Images and Initialize Data and Agents
 
 **Step 1: Build and push container images**
 
@@ -381,35 +381,36 @@ The initial deployment configures the App Services with a placeholder container.
 
 - **For PowerShell (Windows/Linux/macOS):**
     ```shell
-    infra\scripts\build_push_images.ps1
+    infra\scripts\post-provision\build_push_images.ps1
     ```
 - **For Bash (Linux/macOS/WSL):**
     ```bash
-    bash ./infra/scripts/build_push_images.sh
+    bash ./infra/scripts/post-provision/build_push_images.sh
     ```
 
-**If you deployed using `AVM`:**
+**If you deployed from `AVM` repository:**
 
 - **For PowerShell (Windows/Linux/macOS):**
     ```shell
-    infra\scripts\build_push_images.ps1 -ResourceGroup "<your-resource-group-name>"
+    infra\scripts\post-provision\build_push_images.ps1 -ResourceGroup "<your-resource-group-name>"
     ```
 - **For Bash (Linux/macOS/WSL):**
     ```bash
-    bash ./infra/scripts/build_push_images.sh --resource-group "<your-resource-group-name>"
+    bash ./infra/scripts/post-provision/build_push_images.sh --resource-group "<your-resource-group-name>"
     ```
 
 This script will:
-- Build the backend (`src/api`) and frontend (`src/App`) images remotely using `az acr build` (no local Docker required)
+- Build four images (`chat-backend`, `chat-frontend`, `scenario-backend`, `scenario-frontend`) remotely using `az acr build` (no local Docker required)
 - Push them to your Azure Container Registry
-- Update both App Services (`api-<suffix>` and `app-<suffix>`) to run the new image and restart them
+- Update all four App Services to run the new images and restart them
 
 > **Tip:** Pass `-ImageTag <tag>` (PowerShell) or `--image-tag <tag>` (bash) to publish a specific tag. Pass `-ShowLogs` / `--show-logs` to stream the full build output. Each run generates a fresh timestamp tag by default.
 
-**Step 2: Populate Product Catalogs and Search Indexes**
+**Step 2: Load Data and Create AI Foundry Agents**
 
-Run the data setup script to load sample product data
-Run the consolidated post-provision script to load sample product data **and** create the AI Foundry agents in one step. The script reads required values (including the resource group) from the `azd` environment, so it works for `bicep`, `avm`, and `avm-waf` deployments without any extra arguments.
+#### Option A — Run both stages at once (recommended)
+
+The consolidated script runs data upload **and** agent creation in sequence. It reads all required values from the `azd` environment.
 
 - **For PowerShell (Windows/Linux/macOS):**
     ```shell
@@ -420,43 +421,56 @@ Run the consolidated post-provision script to load sample product data **and** c
     bash ./infra/scripts/post-provision/postprovision_data_agents.sh
     ```
 
-This script runs two stages in sequence:
+> **Note:** If a stage fails, the wrapper prints the exact command to re-run only that failed stage.
 
-**Stage 1 — Populate Product Catalogs and Search Indexes** (`run_upload_data_scripts`)
+#### Option B — Run each stage individually
+
+**Stage 1: Populate Product Catalogs and Search Indexes**
+
+- **For PowerShell (Windows/Linux/macOS):**
+    ```shell
+    infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1
+    ```
+- **For Bash (Linux/macOS/WSL):**
+    ```bash
+    bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh
+    ```
+
+This stage:
 - Uploads sample product catalog data to Azure Cosmos DB
 - Creates and configures Azure AI Search indexes
 - Populates search indexes with product and policy documents
 
-**Step 3: Create AI Foundry Agents**
-Run the data setup script to load sample product data and create search indexes in Azure AI Search:
+**Stage 2: Create AI Foundry Agents**
 
 - **For PowerShell (Windows/Linux/macOS):**
     ```shell
-    infra\scripts\agent_scripts\run_create_agents_scripts.ps1
+    infra\scripts\post-provision\agent_scripts\run_create_agents_scripts.ps1
     ```
 - **For Bash (Linux/macOS/WSL):**
-     ```bash
-     bash ./infra/scripts/agent_scripts/run_create_agents_scripts.sh
-     ```  
-**If you deployed using `AVM`:**
+    ```bash
+    bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh
+    ```
 
-- **For PowerShell (Windows/Linux/macOS):**
+**If you deployed from `AVM` repository, pass the resource group explicitly:**
+
+- **For PowerShell:**
     ```shell
-    infra\scripts\agent_scripts\run_create_agents_scripts.ps1 -resourceGroup "<your-resource-group-name>"
+    infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1 -resource_group "<your-resource-group-name>"
+    infra\scripts\post-provision\agent_scripts\run_create_agents_scripts.ps1 -resourceGroup "<your-resource-group-name>"
     ```
-- **For Bash (Linux/macOS/WSL):**
-     ```bash
-     bash ./infra/scripts/agent_scripts/run_create_agents_scripts.sh --resource-group "<your-resource-group-name>"
-     ```
+- **For Bash:**
+    ```bash
+    bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh --resource-group "<your-resource-group-name>"
+    bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh --resource-group "<your-resource-group-name>"
+    ```
 
-This script creates:
-
-**Stage 2 — Create AI Foundry Agents** (`run_create_agents_scripts`)
+This stage creates:
 - **Orchestrator Agent:** Routes customer queries to appropriate specialist agents
 - **Product Lookup Agent:** Handles product search and recommendations
 - **Policy/Knowledge Agent:** Answers questions about policies and general information
 
-> **Note:** If a stage fails, the wrapper prints the exact command to re-run only that stage individually. You can also invoke the underlying scripts directly from `infra/scripts/post-provision/data_scripts/` and `infra/scripts/post-provision/agent_scripts/` if you need to re-run one without the other.
+> **Note:** You can also invoke the underlying scripts directly from `infra/scripts/post-provision/data_scripts/` and `infra/scripts/post-provision/agent_scripts/` if you need to re-run one without the other.
 
 ### 5.3 Configure Authentication (Optional)
 

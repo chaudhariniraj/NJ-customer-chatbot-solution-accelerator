@@ -85,6 +85,9 @@ param privateEndpoints privateEndpointSingleServiceType[]?
 @description('Optional. Managed identities for the resource.')
 param managedIdentities object = { systemAssigned: true }
 
+@description('Optional. Whether to use managed identity credentials for Azure Container Registry.')
+param acrUseManagedIdentityCreds bool = false
+
 // ============================================================================
 // AVM Module Deployment
 // ============================================================================
@@ -107,6 +110,7 @@ module appService 'br/public:avm/res/web/site:0.23.1' = {
       webSocketsEnabled: webSocketsEnabled
       appCommandLine: appCommandLine
       vnetRouteAllEnabled: vnetRouteAllEnabled
+      acrUseManagedIdentityCreds: acrUseManagedIdentityCreds
     }
     e2eEncryptionEnabled: true
     configs: [

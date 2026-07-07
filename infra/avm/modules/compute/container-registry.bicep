@@ -48,6 +48,10 @@ param privateEndpoints privateEndpointSingleServiceType[]?
 @allowed(['Allow', 'Deny'])
 param networkRuleSetDefaultAction string = 'Allow'
 
+@description('Bypass options for the network rule set. Use AzureServices when private endpoints are in place; None for public-only.')
+@allowed(['None', 'AzureServices'])
+param networkRuleBypassOptions string = 'AzureServices'
+
 @description('Enable Azure telemetry collection.')
 param enableTelemetry bool = true
 
@@ -94,6 +98,7 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
     roleAssignments: !empty(roleAssignments) ? roleAssignments : []
     privateEndpoints: privateEndpoints
     networkRuleSetDefaultAction: networkRuleSetDefaultAction
+    networkRuleBypassOptions: networkRuleBypassOptions
     managedIdentities: managedIdentities
   }
 }

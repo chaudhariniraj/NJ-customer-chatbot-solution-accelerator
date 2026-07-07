@@ -3,9 +3,9 @@
 
 <#
 .SYNOPSIS
-    Builds the backend (src/api) and frontend (src/App) container images inside
-    Azure Container Registry using `az acr build`, then updates the two App
-    Services (api-<suffix> and app-<suffix>) to run those images.
+    Builds chat-app and scenario-app container images inside Azure Container
+    Registry using `az acr build`, then updates the four App Services to run
+    those images.
 
 .DESCRIPTION
     Uses `az acr build` so image build/push happens in ACR (no local Docker
@@ -13,42 +13,66 @@
     possible, otherwise from the last successful ARM deployment in the
     resource group. All parameters can be overridden on the command line.
 
+    Four images are built:
+      chat-backend      - repo-root context with chat-app/backend/Dockerfile
+      chat-frontend     - chat-app/frontend/ context
+      scenario-backend  - scenario-app/backend/ context
+      scenario-frontend - repo-root context with scenario-app/frontend/Dockerfile
+
 .PARAMETER ResourceGroup
     Azure resource group that contains ACR and the App Services.
 .PARAMETER AcrName
     Azure Container Registry name (without the .azurecr.io suffix).
-.PARAMETER BackendAppName
-    Backend App Service name (defaults to api-<solution suffix>).
-.PARAMETER FrontendAppName
-    Frontend App Service name (defaults to app-<solution suffix>).
+.PARAMETER ChatBackendAppName
+    Chat backend App Service name.
+.PARAMETER ChatFrontendAppName
+    Chat frontend App Service name.
+.PARAMETER ScenarioBackendAppName
+    Scenario backend App Service name.
+.PARAMETER ScenarioFrontendAppName
+    Scenario frontend App Service name.
 .PARAMETER ImageTag
-    Tag to apply to both images. Defaults to a UTC timestamp.
-.PARAMETER BackendImage
-    Backend image repository name. Defaults to "backend".
-.PARAMETER FrontendImage
-    Frontend image repository name. Defaults to "frontend".
-.PARAMETER SkipBackend
-    Skip building/updating the backend.
-.PARAMETER SkipFrontend
-    Skip building/updating the frontend.
+    Tag to apply to all images. Defaults to a UTC timestamp.
+.PARAMETER ChatBackendImage
+    Chat backend image repository name. Defaults to "chat-backend".
+.PARAMETER ChatFrontendImage
+    Chat frontend image repository name. Defaults to "chat-frontend".
+.PARAMETER ScenarioBackendImage
+    Scenario backend image repository name. Defaults to "scenario-backend".
+.PARAMETER ScenarioFrontendImage
+    Scenario frontend image repository name. Defaults to "scenario-frontend".
+.PARAMETER SkipChatBackend
+    Skip building/updating the chat backend.
+.PARAMETER SkipChatFrontend
+    Skip building/updating the chat frontend.
+.PARAMETER SkipScenarioBackend
+    Skip building/updating the scenario backend.
+.PARAMETER SkipScenarioFrontend
+    Skip building/updating the scenario frontend.
 
 .EXAMPLE
-    ./build_push_images.ps1
+    ./infra/scripts/post-provision/build_push_images.ps1
 
 .EXAMPLE
-    ./build_push_images.ps1 -ResourceGroup rg-ccsa -ImageTag v1.2.3
+    ./infra/scripts/post-provision/build_push_images.ps1 -ResourceGroup rg-ccsa -ImageTag v1.2.3
 #>
 
 param(
     [string]$ResourceGroup,
     [string]$AcrName,
-    [string]$BackendAppName,
-    [string]$FrontendAppName,
+    [string]$ChatBackendAppName,
+    [string]$ChatFrontendAppName,
+    [string]$ScenarioBackendAppName,
+    [string]$ScenarioFrontendAppName,
     [string]$ImageTag,
-    [string]$BackendImage = 'backend',
-    [string]$FrontendImage = 'frontend',
-    [switch]$SkipBackend,
-    [switch]$SkipFrontend,
+    [string]$ChatBackendImage = 'chat-backend',
+    [string]$ChatFrontendImage = 'chat-frontend',
+    [string]$ScenarioBackendImage = 'scenario-backend',
+    [string]$ScenarioFrontendImage = 'scenario-frontend',
+    [switch]$SkipChatBackend,
+    [switch]$SkipChatFrontend,
+    [switch]$SkipScenarioBackend,
+    [switch]$SkipScenarioFrontend,
     [switch]$ShowLogs
 )
 
@@ -58,9 +82,15 @@ $ErrorActionPreference = 'Stop'
 # Paths
 # ---------------------------------------------------------------------------
 $scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot   = Resolve-Path (Join-Path $scriptDir '..' '..')
-$backendCtx = Join-Path $repoRoot 'src/api'
-$frontendCtx = Join-Path $repoRoot 'src/App'
+$repoRoot   = (Resolve-Path (Join-Path $scriptDir '..' '..' '..')).Path
+
+# Build contexts and Dockerfiles
+$chatBackendCtx             = $repoRoot
+$chatBackendDockerfile      = Join-Path $repoRoot 'chat-app' 'backend' 'Dockerfile'
+$chatFrontendCtx            = Join-Path $repoRoot 'chat-app' 'frontend'
+$scenarioBackendCtx         = Join-Path $repoRoot 'scenario-app' 'backend'
+$scenarioFrontendCtx        = $repoRoot
+$scenarioFrontendDockerfile = Join-Path $repoRoot 'scenario-app' 'frontend' 'Dockerfile'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -111,9 +141,12 @@ function Invoke-AcrBuild {
         [string]$Registry,
         [string]$Image,
         [string]$Tag,
-        [string]$Context
+        [string]$Context,
+        [string]$DockerfilePath = ''
     )
     Write-Host "Building $Registry/$Image`:$Tag from $Context" -ForegroundColor Cyan
+
+    $fileArgs = if ($DockerfilePath) { @('--file', $DockerfilePath) } else { @() }
 
     if ($ShowLogs) {
         az acr build `
@@ -121,6 +154,7 @@ function Invoke-AcrBuild {
             --image "$Image`:$Tag" `
             --image "$Image`:latest" `
             --only-show-errors `
+            @fileArgs `
             $Context
         if ($LASTEXITCODE -ne 0) { throw "az acr build failed for image $Image" }
         return
@@ -135,6 +169,7 @@ function Invoke-AcrBuild {
         --no-logs `
         --only-show-errors `
         -o json `
+        @fileArgs `
         $Context 2>&1
     $exit = $LASTEXITCODE
 
@@ -269,46 +304,52 @@ if (-not (Test-CommandAvailable 'az')) {
 # ---------------------------------------------------------------------------
 # Resolve inputs
 # ---------------------------------------------------------------------------
-if (-not $ResourceGroup)   { $ResourceGroup   = Get-AzdEnvValue 'AZURE_RESOURCE_GROUP' }
-if (-not $AcrName)         { $AcrName         = Get-AzdEnvValue 'AZURE_CONTAINER_REGISTRY_NAME' }
-if (-not $AcrName)         { $AcrName         = Get-AzdEnvValue 'ACR_NAME' }
-if (-not $BackendAppName)  { $BackendAppName  = Get-AzdEnvValue 'API_APP_NAME' }
-$solutionSuffix = Get-AzdEnvValue 'SOLUTION_NAME'
-if (-not $FrontendAppName -and $solutionSuffix) { $FrontendAppName = "app-$solutionSuffix" }
-if (-not $ImageTag)        { $ImageTag        = Get-AzdEnvValue 'AZURE_ENV_IMAGETAG' }
+if (-not $ResourceGroup)           { $ResourceGroup           = Get-AzdEnvValue 'AZURE_RESOURCE_GROUP' }
+if (-not $AcrName)                 { $AcrName                 = Get-AzdEnvValue 'AZURE_CONTAINER_REGISTRY_NAME' }
+if (-not $AcrName)                 { $AcrName                 = Get-AzdEnvValue 'ACR_NAME' }
+if (-not $ChatBackendAppName)      { $ChatBackendAppName      = Get-AzdEnvValue 'CHAT_API_APP_NAME' }
+if (-not $ChatFrontendAppName)     { $ChatFrontendAppName     = Get-AzdEnvValue 'CHAT_WEB_APP_NAME' }
+if (-not $ScenarioBackendAppName)  { $ScenarioBackendAppName  = Get-AzdEnvValue 'SCENARIO_API_APP_NAME' }
+if (-not $ScenarioFrontendAppName) { $ScenarioFrontendAppName = Get-AzdEnvValue 'SCENARIO_WEB_APP_NAME' }
+if (-not $ImageTag)                { $ImageTag                = Get-AzdEnvValue 'AZURE_ENV_IMAGETAG' }
 
 # Fall back to deployment outputs for anything still missing
-$needDeployment = -not ($ResourceGroup -and $AcrName -and $BackendAppName -and $FrontendAppName)
+$needDeployment = -not ($ResourceGroup -and $AcrName -and $ChatBackendAppName -and $ChatFrontendAppName -and $ScenarioBackendAppName -and $ScenarioFrontendAppName)
 if ($needDeployment) {
     if (-not $ResourceGroup) {
         throw "ResourceGroup is required. Pass -ResourceGroup or run inside an azd environment."
     }
     Write-Host "Fetching deployment outputs from resource group '$ResourceGroup'..." -ForegroundColor DarkGray
     $outputs = Get-DeploymentOutputs -Rg $ResourceGroup
-    if (-not $AcrName)        { $AcrName        = Get-OutputValue $outputs @('AZURE_CONTAINER_REGISTRY_NAME','azureContainerRegistryName','ACR_NAME','acrName') }
-    if (-not $BackendAppName) { $BackendAppName = Get-OutputValue $outputs @('API_APP_NAME','apiAppName') }
-    if (-not $solutionSuffix) { $solutionSuffix = Get-OutputValue $outputs @('SOLUTION_NAME','solutionName') }
-    if (-not $FrontendAppName -and $solutionSuffix) { $FrontendAppName = "app-$solutionSuffix" }
+    if (-not $AcrName)                 { $AcrName                 = Get-OutputValue $outputs @('AZURE_CONTAINER_REGISTRY_NAME','azureContainerRegistryName','ACR_NAME','acrName') }
+    if (-not $ChatBackendAppName)      { $ChatBackendAppName      = Get-OutputValue $outputs @('CHAT_API_APP_NAME','chatApiAppName') }
+    if (-not $ChatFrontendAppName)     { $ChatFrontendAppName     = Get-OutputValue $outputs @('CHAT_WEB_APP_NAME','chatWebAppName') }
+    if (-not $ScenarioBackendAppName)  { $ScenarioBackendAppName  = Get-OutputValue $outputs @('SCENARIO_API_APP_NAME','scenarioApiAppName') }
+    if (-not $ScenarioFrontendAppName) { $ScenarioFrontendAppName = Get-OutputValue $outputs @('SCENARIO_WEB_APP_NAME','scenarioWebAppName') }
 }
 
 if (-not $ImageTag) {
     $ImageTag = (Get-Date -Format 'yyyyMMddHHmmss')
 }
 
-if (-not $ResourceGroup)                        { throw "Missing ResourceGroup." }
-if (-not $AcrName)                              { throw "Missing AcrName." }
-if (-not $SkipBackend  -and -not $BackendAppName)  { throw "Missing BackendAppName." }
-if (-not $SkipFrontend -and -not $FrontendAppName) { throw "Missing FrontendAppName." }
+if (-not $ResourceGroup)                                            { throw "Missing ResourceGroup." }
+if (-not $AcrName)                                                  { throw "Missing AcrName." }
+if (-not $SkipChatBackend      -and -not $ChatBackendAppName)       { throw "Missing ChatBackendAppName." }
+if (-not $SkipChatFrontend     -and -not $ChatFrontendAppName)      { throw "Missing ChatFrontendAppName." }
+if (-not $SkipScenarioBackend  -and -not $ScenarioBackendAppName)   { throw "Missing ScenarioBackendAppName." }
+if (-not $SkipScenarioFrontend -and -not $ScenarioFrontendAppName)  { throw "Missing ScenarioFrontendAppName." }
 
 $acrLoginServer = "$AcrName.azurecr.io"
 
 Write-Host ""
 Write-Host "Configuration" -ForegroundColor Green
-Write-Host "  Resource group : $ResourceGroup"
-Write-Host "  ACR            : $acrLoginServer"
-Write-Host "  Backend app    : $BackendAppName"
-Write-Host "  Frontend app   : $FrontendAppName"
-Write-Host "  Image tag      : $ImageTag"
+Write-Host "  Resource group         : $ResourceGroup"
+Write-Host "  ACR                    : $acrLoginServer"
+Write-Host "  Chat backend app       : $ChatBackendAppName"
+Write-Host "  Chat frontend app      : $ChatFrontendAppName"
+Write-Host "  Scenario backend app   : $ScenarioBackendAppName"
+Write-Host "  Scenario frontend app  : $ScenarioFrontendAppName"
+Write-Host "  Image tag              : $ImageTag"
 Write-Host ""
 
 # ---------------------------------------------------------------------------
@@ -317,24 +358,44 @@ Write-Host ""
 try {
     Enable-AcrPublicAccess -Name $AcrName
 
-    if (-not $SkipBackend) {
-        if (-not (Test-Path (Join-Path $backendCtx 'Dockerfile'))) {
-            throw "Backend Dockerfile not found at $backendCtx/Dockerfile"
+    if (-not $SkipChatBackend) {
+        if (-not (Test-Path $chatBackendDockerfile)) {
+            throw "Chat backend Dockerfile not found at $chatBackendDockerfile"
         }
-        Invoke-AcrBuild -Registry $AcrName -Image $BackendImage -Tag $ImageTag -Context $backendCtx
-        Set-WebAppContainer -Rg $ResourceGroup -AppName $BackendAppName -AcrLoginServer $acrLoginServer -Image $BackendImage -Tag $ImageTag
+        Invoke-AcrBuild -Registry $AcrName -Image $ChatBackendImage -Tag $ImageTag -Context $chatBackendCtx -DockerfilePath $chatBackendDockerfile
+        Set-WebAppContainer -Rg $ResourceGroup -AppName $ChatBackendAppName -AcrLoginServer $acrLoginServer -Image $ChatBackendImage -Tag $ImageTag
     } else {
-        Write-Host "Skipping backend (SkipBackend)." -ForegroundColor Yellow
+        Write-Host "Skipping chat backend (SkipChatBackend)." -ForegroundColor Yellow
     }
 
-    if (-not $SkipFrontend) {
-        if (-not (Test-Path (Join-Path $frontendCtx 'Dockerfile'))) {
-            throw "Frontend Dockerfile not found at $frontendCtx/Dockerfile"
+    if (-not $SkipChatFrontend) {
+        if (-not (Test-Path (Join-Path $chatFrontendCtx 'Dockerfile'))) {
+            throw "Chat frontend Dockerfile not found at $chatFrontendCtx/Dockerfile"
         }
-        Invoke-AcrBuild -Registry $AcrName -Image $FrontendImage -Tag $ImageTag -Context $frontendCtx
-        Set-WebAppContainer -Rg $ResourceGroup -AppName $FrontendAppName -AcrLoginServer $acrLoginServer -Image $FrontendImage -Tag $ImageTag
+        Invoke-AcrBuild -Registry $AcrName -Image $ChatFrontendImage -Tag $ImageTag -Context $chatFrontendCtx
+        Set-WebAppContainer -Rg $ResourceGroup -AppName $ChatFrontendAppName -AcrLoginServer $acrLoginServer -Image $ChatFrontendImage -Tag $ImageTag
     } else {
-        Write-Host "Skipping frontend (SkipFrontend)." -ForegroundColor Yellow
+        Write-Host "Skipping chat frontend (SkipChatFrontend)." -ForegroundColor Yellow
+    }
+
+    if (-not $SkipScenarioBackend) {
+        if (-not (Test-Path (Join-Path $scenarioBackendCtx 'Dockerfile'))) {
+            throw "Scenario backend Dockerfile not found at $scenarioBackendCtx/Dockerfile"
+        }
+        Invoke-AcrBuild -Registry $AcrName -Image $ScenarioBackendImage -Tag $ImageTag -Context $scenarioBackendCtx
+        Set-WebAppContainer -Rg $ResourceGroup -AppName $ScenarioBackendAppName -AcrLoginServer $acrLoginServer -Image $ScenarioBackendImage -Tag $ImageTag
+    } else {
+        Write-Host "Skipping scenario backend (SkipScenarioBackend)." -ForegroundColor Yellow
+    }
+
+    if (-not $SkipScenarioFrontend) {
+        if (-not (Test-Path $scenarioFrontendDockerfile)) {
+            throw "Scenario frontend Dockerfile not found at $scenarioFrontendDockerfile"
+        }
+        Invoke-AcrBuild -Registry $AcrName -Image $ScenarioFrontendImage -Tag $ImageTag -Context $scenarioFrontendCtx -DockerfilePath $scenarioFrontendDockerfile
+        Set-WebAppContainer -Rg $ResourceGroup -AppName $ScenarioFrontendAppName -AcrLoginServer $acrLoginServer -Image $ScenarioFrontendImage -Tag $ImageTag
+    } else {
+        Write-Host "Skipping scenario frontend (SkipScenarioFrontend)." -ForegroundColor Yellow
     }
 
     Write-Host ""
