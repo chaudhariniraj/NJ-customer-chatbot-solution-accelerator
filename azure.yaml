@@ -49,7 +49,6 @@ hooks:
         Write-Host "   Option B - Run each stage individually:`n" -ForegroundColor White
         Write-Host "     Data:   infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1" -ForegroundColor Cyan
         Write-Host "     Agents: infra\scripts\post-provision\agent_scripts\run_create_agents_scripts.ps1`n" -ForegroundColor Cyan
-      shell: pwsh
       continueOnError: false
       interactive: true
     posix:
