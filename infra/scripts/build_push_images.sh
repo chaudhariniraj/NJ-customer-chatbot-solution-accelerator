@@ -201,8 +201,22 @@ enable_acr_public_access() {
     local name="$1"
     echo "Checking ACR public network access for '$name'..."
 
-    ORIGINAL_ACR_PUBLIC_ACCESS="$(az acr show --name "$name" --query "publicNetworkAccess"          -o tsv 2>/dev/null || true)"
-    ORIGINAL_ACR_DEFAULT_ACTION="$(az acr show --name "$name" --query "networkRuleSet.defaultAction" -o tsv 2>/dev/null || true)"
+    local raw_public_access raw_default_action
+    raw_public_access="$(az acr show --name "$name" --query "publicNetworkAccess" -o tsv 2>/dev/null)" || {
+        echo "ERROR: Failed to read ACR public network access for '$name'. Ensure the registry exists and you have sufficient permissions." >&2
+        return 1
+    }
+    if [[ -z "$raw_public_access" ]]; then
+        echo "ERROR: ACR '$name' returned no publicNetworkAccess value. Ensure the registry name is correct." >&2
+        return 1
+    fi
+    ORIGINAL_ACR_PUBLIC_ACCESS="$raw_public_access"
+
+    raw_default_action="$(az acr show --name "$name" --query "networkRuleSet.defaultAction" -o tsv 2>/dev/null)" || {
+        echo "ERROR: Failed to read ACR network rule set for '$name'." >&2
+        return 1
+    }
+    ORIGINAL_ACR_DEFAULT_ACTION="$raw_default_action"
     echo "  Current: publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}  defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION}"
 
     if [[ "$ORIGINAL_ACR_PUBLIC_ACCESS" != "Enabled" ]]; then
@@ -250,9 +264,7 @@ restore_acr_access() {
 }
 
 cleanup_on_exit() {
-    local exit_code=$?
     restore_acr_access "$ACR_NAME"
-    exit $exit_code
 }
 
 # ---------------------------------------------------------------------------
@@ -299,7 +311,9 @@ Configuration
   Image tag      : $IMAGE_TAG
 EOF
 
-trap cleanup_on_exit EXIT INT TERM
+trap cleanup_on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 enable_acr_public_access "$ACR_NAME"
 

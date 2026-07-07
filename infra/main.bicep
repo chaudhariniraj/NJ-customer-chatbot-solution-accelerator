@@ -616,7 +616,7 @@ var dnsZoneIndex = {
   cosmosDb: 3
   search: 4
   webApp: 5
-  containerRegistry: 4
+  containerRegistry: 6
 }
 
 // List of DNS zone indices that correspond to AI-related services.
