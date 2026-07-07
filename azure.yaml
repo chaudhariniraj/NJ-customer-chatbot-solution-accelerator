@@ -20,8 +20,8 @@ hooks:
       continueOnError: false
       interactive: false
     posix:
-      shell: pwsh
-      run: ./infra/scripts/pre-provision/preflight_scenario.ps1
+      shell: bash
+      run: bash ./infra/scripts/pre-provision/preflight_scenario.sh
       continueOnError: false
       interactive: false
 
