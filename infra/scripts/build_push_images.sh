@@ -37,6 +37,11 @@ SKIP_BACKEND=false
 SKIP_FRONTEND=false
 SHOW_LOGS=false
 
+# ACR public-access state (populated by enable_acr_public_access)
+ORIGINAL_ACR_PUBLIC_ACCESS=""
+ORIGINAL_ACR_DEFAULT_ACTION=""
+ACR_ACCESS_MODIFIED=false
+
 usage() {
     sed -n '2,25p' "$0"
     exit "${1:-0}"
@@ -192,6 +197,64 @@ update_webapp() {
     az webapp restart --name "$app" --resource-group "$rg" --only-show-errors >/dev/null
 }
 
+enable_acr_public_access() {
+    local name="$1"
+    echo "Checking ACR public network access for '$name'..."
+
+    ORIGINAL_ACR_PUBLIC_ACCESS="$(az acr show --name "$name" --query "publicNetworkAccess"          -o tsv 2>/dev/null || true)"
+    ORIGINAL_ACR_DEFAULT_ACTION="$(az acr show --name "$name" --query "networkRuleSet.defaultAction" -o tsv 2>/dev/null || true)"
+    echo "  Current: publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}  defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION}"
+
+    if [[ "$ORIGINAL_ACR_PUBLIC_ACCESS" != "Enabled" ]]; then
+        echo "  Enabling ACR public network access..."
+        az acr update --name "$name" --public-network-enabled true --only-show-errors >/dev/null
+        ACR_ACCESS_MODIFIED=true
+    fi
+
+    if [[ "$ORIGINAL_ACR_DEFAULT_ACTION" == "Deny" ]]; then
+        echo "  Setting ACR network default action to Allow..."
+        az acr update --name "$name" --default-action Allow --only-show-errors >/dev/null
+        ACR_ACCESS_MODIFIED=true
+    fi
+
+    if $ACR_ACCESS_MODIFIED; then
+        echo "  ACR network access updated. Waiting 15 s for changes to propagate..."
+        sleep 15
+    else
+        echo "  ACR public access already open - no changes needed."
+    fi
+}
+
+restore_acr_access() {
+    local name="$1"
+    echo ""
+    echo "=== Restoring original ACR network settings ==="
+    if ! $ACR_ACCESS_MODIFIED; then
+        echo "  ACR unchanged - no restoration needed."
+        return 0
+    fi
+    echo "  Restoring ACR '$name' to original settings..."
+    local update_args=("acr" "update" "--name" "$name" "--only-show-errors")
+    if [[ "$ORIGINAL_ACR_PUBLIC_ACCESS" != "Enabled" ]]; then
+        update_args+=("--public-network-enabled" "false")
+    fi
+    if [[ "$ORIGINAL_ACR_DEFAULT_ACTION" == "Deny" ]]; then
+        update_args+=("--default-action" "Deny")
+    fi
+    if az "${update_args[@]}" >/dev/null 2>&1; then
+        echo "  \u2713 ACR settings restored (publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}, defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION})."
+    else
+        echo "  WARNING: Failed to restore ACR network settings for '$name'. Please restore manually."
+        echo "    Expected: publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}  defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION}"
+    fi
+}
+
+cleanup_on_exit() {
+    local exit_code=$?
+    restore_acr_access "$ACR_NAME"
+    exit $exit_code
+}
+
 # ---------------------------------------------------------------------------
 # Resolve inputs
 # ---------------------------------------------------------------------------
@@ -235,6 +298,10 @@ Configuration
   Frontend app   : $FRONTEND_APP
   Image tag      : $IMAGE_TAG
 EOF
+
+trap cleanup_on_exit EXIT INT TERM
+
+enable_acr_public_access "$ACR_NAME"
 
 # ---------------------------------------------------------------------------
 # Build & deploy
