@@ -189,6 +189,68 @@ function Set-WebAppContainer {
 }
 
 # ---------------------------------------------------------------------------
+# ACR public-access helpers
+# ---------------------------------------------------------------------------
+$script:OriginalAcrPublicAccess  = $null
+$script:OriginalAcrDefaultAction = $null
+$script:AcrAccessModified        = $false
+
+function Enable-AcrPublicAccess {
+    param([string]$Name)
+    Write-Host "Checking ACR public network access for '$Name'..." -ForegroundColor DarkGray
+
+    $script:OriginalAcrPublicAccess  = (az acr show --name $Name --query "publicNetworkAccess"          -o tsv 2>$null).Trim()
+    $script:OriginalAcrDefaultAction = (az acr show --name $Name --query "networkRuleSet.defaultAction" -o tsv 2>$null).Trim()
+    Write-Host "  Current: publicNetworkAccess=$($script:OriginalAcrPublicAccess)  defaultAction=$($script:OriginalAcrDefaultAction)" -ForegroundColor DarkGray
+
+    if ($script:OriginalAcrPublicAccess -ne 'Enabled') {
+        Write-Host "  Enabling ACR public network access..." -ForegroundColor Cyan
+        az acr update --name $Name --public-network-enabled true --only-show-errors | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to enable public network access for ACR '$Name'." }
+        $script:AcrAccessModified = $true
+    }
+
+    if ($script:OriginalAcrDefaultAction -eq 'Deny') {
+        Write-Host "  Setting ACR network default action to Allow..." -ForegroundColor Cyan
+        az acr update --name $Name --default-action Allow --only-show-errors | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to set default network action for ACR '$Name'." }
+        $script:AcrAccessModified = $true
+    }
+
+    if ($script:AcrAccessModified) {
+        Write-Host "  ACR network access updated. Waiting 15 s for changes to propagate..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds 15
+    } else {
+        Write-Host "  ACR public access already open - no changes needed." -ForegroundColor DarkGray
+    }
+}
+
+function Restore-AcrAccess {
+    param([string]$Name)
+    Write-Host ""
+    Write-Host "=== Restoring original ACR network settings ===" -ForegroundColor DarkGray
+    if (-not $script:AcrAccessModified) {
+        Write-Host "  ACR unchanged - no restoration needed." -ForegroundColor DarkGray
+        return
+    }
+    Write-Host "  Restoring ACR '$Name' to original settings..." -ForegroundColor Cyan
+    $updateArgs = @('acr', 'update', '--name', $Name, '--only-show-errors')
+    if ($script:OriginalAcrPublicAccess -ne 'Enabled') {
+        $updateArgs += @('--public-network-enabled', 'false')
+    }
+    if ($script:OriginalAcrDefaultAction -eq 'Deny') {
+        $updateArgs += @('--default-action', 'Deny')
+    }
+    az @updateArgs | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "  ACR settings restored (publicNetworkAccess=$($script:OriginalAcrPublicAccess), defaultAction=$($script:OriginalAcrDefaultAction))." -ForegroundColor Green
+    } else {
+        Write-Host "  WARNING: Failed to restore ACR network settings for '$Name'. Please restore manually." -ForegroundColor Yellow
+        Write-Host "    Expected: publicNetworkAccess=$($script:OriginalAcrPublicAccess)  defaultAction=$($script:OriginalAcrDefaultAction)" -ForegroundColor Yellow
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 if (-not (Test-CommandAvailable 'az')) {
@@ -243,25 +305,32 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # Build & deploy
 # ---------------------------------------------------------------------------
-if (-not $SkipBackend) {
-    if (-not (Test-Path (Join-Path $backendCtx 'Dockerfile'))) {
-        throw "Backend Dockerfile not found at $backendCtx/Dockerfile"
-    }
-    Invoke-AcrBuild -Registry $AcrName -Image $BackendImage -Tag $ImageTag -Context $backendCtx
-    Set-WebAppContainer -Rg $ResourceGroup -AppName $BackendAppName -AcrLoginServer $acrLoginServer -Image $BackendImage -Tag $ImageTag
-} else {
-    Write-Host "Skipping backend (SkipBackend)." -ForegroundColor Yellow
-}
+try {
+    Enable-AcrPublicAccess -Name $AcrName
 
-if (-not $SkipFrontend) {
-    if (-not (Test-Path (Join-Path $frontendCtx 'Dockerfile'))) {
-        throw "Frontend Dockerfile not found at $frontendCtx/Dockerfile"
+    if (-not $SkipBackend) {
+        if (-not (Test-Path (Join-Path $backendCtx 'Dockerfile'))) {
+            throw "Backend Dockerfile not found at $backendCtx/Dockerfile"
+        }
+        Invoke-AcrBuild -Registry $AcrName -Image $BackendImage -Tag $ImageTag -Context $backendCtx
+        Set-WebAppContainer -Rg $ResourceGroup -AppName $BackendAppName -AcrLoginServer $acrLoginServer -Image $BackendImage -Tag $ImageTag
+    } else {
+        Write-Host "Skipping backend (SkipBackend)." -ForegroundColor Yellow
     }
-    Invoke-AcrBuild -Registry $AcrName -Image $FrontendImage -Tag $ImageTag -Context $frontendCtx
-    Set-WebAppContainer -Rg $ResourceGroup -AppName $FrontendAppName -AcrLoginServer $acrLoginServer -Image $FrontendImage -Tag $ImageTag
-} else {
-    Write-Host "Skipping frontend (SkipFrontend)." -ForegroundColor Yellow
-}
 
-Write-Host ""
-Write-Host "Done. Images published with tag '$ImageTag'." -ForegroundColor Green
+    if (-not $SkipFrontend) {
+        if (-not (Test-Path (Join-Path $frontendCtx 'Dockerfile'))) {
+            throw "Frontend Dockerfile not found at $frontendCtx/Dockerfile"
+        }
+        Invoke-AcrBuild -Registry $AcrName -Image $FrontendImage -Tag $ImageTag -Context $frontendCtx
+        Set-WebAppContainer -Rg $ResourceGroup -AppName $FrontendAppName -AcrLoginServer $acrLoginServer -Image $FrontendImage -Tag $ImageTag
+    } else {
+        Write-Host "Skipping frontend (SkipFrontend)." -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "Done. Images published with tag '$ImageTag'." -ForegroundColor Green
+}
+finally {
+    Restore-AcrAccess -Name $AcrName
+}
