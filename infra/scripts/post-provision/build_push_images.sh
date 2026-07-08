@@ -283,6 +283,7 @@ enable_acr_public_access() {
     else
         echo "  ACR public access already open - no changes needed."
     fi
+    echo ""
 }
 
 restore_acr_access() {
@@ -378,6 +379,8 @@ else
     echo "Skipping chat backend (--skip-chat-backend)."
 fi
 
+echo ""
+
 if ! $SKIP_CHAT_FRONTEND; then
     [[ -f "$CHAT_FRONTEND_CTX/Dockerfile" ]] || { echo "ERROR: $CHAT_FRONTEND_CTX/Dockerfile not found." >&2; exit 1; }
     run_acr_build "$ACR_NAME" "$CHAT_FRONTEND_IMAGE" "$IMAGE_TAG" "$CHAT_FRONTEND_CTX"
@@ -386,6 +389,8 @@ else
     echo "Skipping chat frontend (--skip-chat-frontend)."
 fi
 
+echo ""
+
 if ! $SKIP_SCENARIO_BACKEND; then
     [[ -f "$SCENARIO_BACKEND_CTX/Dockerfile" ]] || { echo "ERROR: $SCENARIO_BACKEND_CTX/Dockerfile not found." >&2; exit 1; }
     run_acr_build "$ACR_NAME" "$SCENARIO_BACKEND_IMAGE"  "$IMAGE_TAG" "$SCENARIO_BACKEND_CTX"
@@ -393,6 +398,8 @@ if ! $SKIP_SCENARIO_BACKEND; then
 else
     echo "Skipping scenario backend (--skip-scenario-backend)."
 fi
+
+echo ""
 
 if ! $SKIP_SCENARIO_FRONTEND; then
     [[ -f "$SCENARIO_FRONTEND_DOCKERFILE" ]] || { echo "ERROR: $SCENARIO_FRONTEND_DOCKERFILE not found." >&2; exit 1; }
@@ -404,3 +411,4 @@ fi
 
 echo ""
 echo "Done. Images published with tag '$IMAGE_TAG'."
+echo ""

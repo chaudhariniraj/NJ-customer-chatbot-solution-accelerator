@@ -267,6 +267,7 @@ function Enable-AcrPublicAccess {
     } else {
         Write-Host "  ACR public access already open - no changes needed." -ForegroundColor DarkGray
     }
+    Write-Host ""
 }
 
 function Restore-AcrAccess {
@@ -368,6 +369,8 @@ try {
         Write-Host "Skipping chat backend (SkipChatBackend)." -ForegroundColor Yellow
     }
 
+    Write-Host ""
+
     if (-not $SkipChatFrontend) {
         if (-not (Test-Path (Join-Path $chatFrontendCtx 'Dockerfile'))) {
             throw "Chat frontend Dockerfile not found at $chatFrontendCtx/Dockerfile"
@@ -378,6 +381,8 @@ try {
         Write-Host "Skipping chat frontend (SkipChatFrontend)." -ForegroundColor Yellow
     }
 
+    Write-Host ""
+
     if (-not $SkipScenarioBackend) {
         if (-not (Test-Path (Join-Path $scenarioBackendCtx 'Dockerfile'))) {
             throw "Scenario backend Dockerfile not found at $scenarioBackendCtx/Dockerfile"
@@ -387,6 +392,8 @@ try {
     } else {
         Write-Host "Skipping scenario backend (SkipScenarioBackend)." -ForegroundColor Yellow
     }
+
+    Write-Host ""
 
     if (-not $SkipScenarioFrontend) {
         if (-not (Test-Path $scenarioFrontendDockerfile)) {
@@ -399,7 +406,7 @@ try {
     }
 
     Write-Host ""
-    Write-Host "Done. Images published with tag '$ImageTag'." -ForegroundColor Green
+    Write-Host "`nDone. Images published with tag '$ImageTag'.`n" -ForegroundColor Green
 }
 finally {
     Restore-AcrAccess -Name $AcrName
