@@ -52,7 +52,7 @@ param tags object = {}
   azd: {
     type: 'location'
     usageName: [
-      'OpenAI.GlobalStandard.gpt4.1-mini,50'
+      'OpenAI.GlobalStandard.gpt-5.4-mini,50'
       'OpenAI.GlobalStandard.text-embedding-3-small,10'
       'OpenAI.GlobalStandard.gpt-realtime-mini,1'
     ]
@@ -81,10 +81,10 @@ param deploymentScenario string = 'ecommerce'
 param deploymentType string = 'GlobalStandard'
 
 @description('Optional. Name of the GPT model to deploy.')
-param gptModelName string = 'gpt-4.1-mini'
+param gptModelName string = 'gpt-5.4-mini'
 
 @description('Optional. Version of the GPT model to deploy.')
-param gptModelVersion string = '2025-04-14'
+param gptModelVersion string = '2026-03-17'
 
 @minValue(10)
 @description('Optional. Capacity of the GPT deployment (TPM in thousands).')
@@ -122,12 +122,6 @@ param azureAiAgentApiVersion string = '2025-05-01'
 // ============================================================================
 // Parameters — Compute
 // ============================================================================
-
-@description('Optional. Docker image tag for app deployments.')
-param imageTag string = 'latest_v2'
-
-@description('Optional. Container registry endpoint used for app images.')
-param containerRegistryEndpoint string = 'ccbcontainerreg.azurecr.io'
 
 @allowed(['F1', 'D1', 'B1', 'B2', 'B3', 'S1', 'S2', 'S3', 'P1', 'P2', 'P3', 'P1v3', 'P1v4'])
 @description('Optional. App Service Plan SKU.')
@@ -369,14 +363,19 @@ module cosmosDBModule './modules/data/cosmos-db-nosql.bicep' = {
 // Module: Compute
 // ============================================================================
 
-var chatFrontendImageRepository string = 'chat-frontend'
-var chatBackendImageRepository string = 'chat-backend'
-var scenarioFrontendImageRepository string = 'scenario-frontend'
-var scenarioBackendImageRepository string = 'scenario-backend'
-var chatbackendImageName = 'DOCKER|${containerRegistryEndpoint}/${chatBackendImageRepository}:${imageTag}'
-var chatfrontendImageName = 'DOCKER|${containerRegistryEndpoint}/${chatFrontendImageRepository}:${imageTag}'
-var scenarioBackendImageName = 'DOCKER|${containerRegistryEndpoint}/${scenarioBackendImageRepository}:${imageTag}'
-var scenarioFrontendImageName = 'DOCKER|${containerRegistryEndpoint}/${scenarioFrontendImageRepository}:${imageTag}'
+module container_registry './modules/compute/container-registry.bicep' = {
+  name: take('module.container-registry.${solutionName}', 64)
+  params: {
+    solutionName: solutionSuffix
+    name: 'cr${solutionSuffix}'
+    location: location
+    sku: 'Basic'
+    adminUserEnabled: false
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+var helloWorldDefaultImageName = 'DOCKER|mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
 var chatApiAppName = 'api-chat-${solutionSuffix}'
 var chatWebAppName = 'app-chat-${solutionSuffix}'
@@ -453,10 +452,11 @@ module chat_backend_app './modules/compute/app-service.bicep' = {
     name: chatApiAppName
     location: location
     kind: 'app,linux,container'
-    linuxFxVersion: chatbackendImageName
+    linuxFxVersion: helloWorldDefaultImageName
     serverFarmResourceId: hostingplan.outputs.resourceId
     webSocketsEnabled: true
     healthCheckPath: '/health'
+    acrUseManagedIdentityCreds: true
     appSettings: {
       AZURE_OPENAI_DEPLOYMENT_MODEL: gptModelName
       AZURE_OPENAI_ENDPOINT: aiFoundryEndpoint
@@ -521,8 +521,9 @@ module chat_frontend_app './modules/compute/app-service.bicep' = {
     name: chatWebAppName
     location: location
     kind: 'app,linux,container'
-    linuxFxVersion: chatfrontendImageName
+    linuxFxVersion: helloWorldDefaultImageName
     serverFarmResourceId: hostingplan.outputs.resourceId
+    acrUseManagedIdentityCreds: true
     appSettings: {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: chat_backend_app.outputs.appUrl
@@ -545,9 +546,10 @@ module scenario_backend_app './modules/compute/app-service.bicep' = {
     location: location
     kind: 'app,linux,container'
     serverFarmResourceId: hostingplan.outputs.resourceId
-    linuxFxVersion: scenarioBackendImageName
+    linuxFxVersion: helloWorldDefaultImageName
     healthCheckPath: '/health'
     webSocketsEnabled: true
+    acrUseManagedIdentityCreds: true
     appSettings: {
       AZURE_OPENAI_DEPLOYMENT_MODEL: gptModelName
       AZURE_OPENAI_ENDPOINT: aiFoundryEndpoint
@@ -607,7 +609,8 @@ module scenario_frontend_app './modules/compute/app-service.bicep' = {
     location: location
     kind: 'app,linux,container'
     serverFarmResourceId: hostingplan.outputs.resourceId
-    linuxFxVersion: scenarioFrontendImageName
+    linuxFxVersion: helloWorldDefaultImageName
+    acrUseManagedIdentityCreds: true
     appSettings: {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: scenario_backend_app.outputs.appUrl
@@ -642,8 +645,11 @@ module role_assignments './modules/identity/role-assignments.bicep' = {
     appServicePrincipalIds: {
       chatBackendApp: chat_backend_app.outputs.identityPrincipalId
       scenarioBackendApp: scenario_backend_app.outputs.identityPrincipalId
+      chatFrontendApp: chat_frontend_app.outputs.identityPrincipalId
+      scenarioFrontendApp: scenario_frontend_app.outputs.identityPrincipalId
     }
     cosmosDbAccountName: cosmosDBModule.outputs.name
+    containerRegistryResourceId: container_registry.outputs.resourceId
   }
   scope: resourceGroup(resourceGroup().name)
 }
@@ -733,12 +739,6 @@ output AZURE_FOUNDRY_ENDPOINT string = projectEndpoint
 @description('Azure AI Agent model deployment name.')
 output AZURE_AI_AGENT_MODEL_DEPLOYMENT_NAME string = gptModelName
 
-@description('Name of the Azure Container Registry.')
-output ACR_NAME string = split(containerRegistryEndpoint, '.')[0]
-
-@description('Container image tag for app deployments.')
-output AZURE_ENV_IMAGETAG string = imageTag
-
 @description('Name of the Azure AI Services resource.')
 output AI_SERVICE_NAME string = aiFoundryName
 
@@ -801,3 +801,9 @@ output AI_SEARCH_SERVICE_RESOURCE_ID string = ai_search.outputs.resourceId
 
 @description('Application environment (Production)')
 output APP_ENV string = 'Prod'
+
+@description('Azure Container Registry endpoint URL')
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = container_registry.outputs.loginServer
+
+@description('Azure Container Registry name')
+output AZURE_CONTAINER_REGISTRY_NAME string = container_registry.outputs.name

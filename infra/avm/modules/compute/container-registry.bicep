@@ -40,18 +40,17 @@ param acrPushPrincipalIds array = []
 @allowed(['User', 'ServicePrincipal', 'Group'])
 param acrPushPrincipalType string = 'User'
 
-@description('Enable private networking.')
-param enablePrivateNetworking bool = false
-
-@description('Subnet resource ID for private endpoint.')
-param privateEndpointSubnetId string = ''
-
-@description('Private DNS zone resource IDs for private endpoint.')
-param privateDnsZoneResourceIds array = []
+import { privateEndpointSingleServiceType } from 'br/public:avm/utl/types/avm-common-types:0.5.1'
+@description('Optional. Configuration details for private endpoints. For security reasons, it is recommended to use private endpoints whenever possible.')
+param privateEndpoints privateEndpointSingleServiceType[]?
 
 @description('Default action for the network rule set. Use Allow when no private endpoint is in place; Deny for private-only.')
 @allowed(['Allow', 'Deny'])
 param networkRuleSetDefaultAction string = 'Allow'
+
+@description('Bypass options for the network rule set. Use AzureServices when private endpoints are in place; None for public-only.')
+@allowed(['None', 'AzureServices'])
+param networkRuleBypassOptions string = 'AzureServices'
 
 @description('Enable Azure telemetry collection.')
 param enableTelemetry bool = true
@@ -83,23 +82,6 @@ var roleAssignments = concat(
 )
 
 // ============================================================================
-// Private Endpoint Config
-// ============================================================================
-var dnsZoneConfigs = [for (zoneId, i) in privateDnsZoneResourceIds: {
-  name: 'config${i}'
-  privateDnsZoneResourceId: zoneId
-}]
-
-var privateEndpointConfig = enablePrivateNetworking && !empty(privateEndpointSubnetId) ? [
-  {
-    subnetResourceId: privateEndpointSubnetId
-    privateDnsZoneGroup: !empty(privateDnsZoneResourceIds) ? {
-      privateDnsZoneGroupConfigs: dnsZoneConfigs
-    } : null
-  }
-] : []
-
-// ============================================================================
 // Container Registry (AVM)
 // ============================================================================
 module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' = {
@@ -114,8 +96,9 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
     publicNetworkAccess: publicNetworkAccess
     exportPolicyStatus: exportPolicyStatus
     roleAssignments: !empty(roleAssignments) ? roleAssignments : []
-    privateEndpoints: privateEndpointConfig
+    privateEndpoints: privateEndpoints
     networkRuleSetDefaultAction: networkRuleSetDefaultAction
+    networkRuleBypassOptions: networkRuleBypassOptions
     managedIdentities: managedIdentities
   }
 }

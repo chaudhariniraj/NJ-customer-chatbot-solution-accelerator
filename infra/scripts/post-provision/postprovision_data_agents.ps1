@@ -14,6 +14,8 @@ try {
   Write-Host "Upload data script failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
+Write-Host "`n"
+
 $isCreateAgentsScriptSuccess = $true
 try {
   & (Join-Path $repoRoot 'infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.ps1')
@@ -25,6 +27,8 @@ try {
   $isCreateAgentsScriptSuccess = $false
   Write-Host "Create agents script failed: $($_.Exception.Message)" -ForegroundColor Red
 }
+
+Write-Host "`n"
 
 if (-not $isUploadDataScriptSuccess -or -not $isCreateAgentsScriptSuccess) {
   Write-Host "One or more post-provision scripts failed. Please check the logs above for details." -ForegroundColor Red

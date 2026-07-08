@@ -10,11 +10,16 @@ if [[ $upload_ok -eq 0 ]]; then
   echo "Upload data script failed." >&2
 fi
 
+echo ""
+echo ""
+
 agents_ok=1
 bash "$ROOT/infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh" || agents_ok=0
 if [[ $agents_ok -eq 0 ]]; then
   echo "Create agents script failed." >&2
 fi
+
+echo ""
 
 if [[ $upload_ok -eq 0 || $agents_ok -eq 0 ]]; then
   echo "One or more post-provision scripts failed. Please check the logs above for details." >&2

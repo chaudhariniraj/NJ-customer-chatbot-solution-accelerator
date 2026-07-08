@@ -59,7 +59,7 @@ param tags object = {}
   azd: {
     type: 'location'
     usageName: [
-      'OpenAI.GlobalStandard.gpt4.1-mini,50'
+      'OpenAI.GlobalStandard.gpt-5.4-mini,50'
       'OpenAI.GlobalStandard.text-embedding-3-small,10'
       'OpenAI.GlobalStandard.gpt-realtime-mini,1'
     ]
@@ -88,10 +88,10 @@ param deploymentScenario string = 'ecommerce'
 param deploymentType string = 'GlobalStandard'
 
 @description('Optional. Name of the GPT model to deploy.')
-param gptModelName string = 'gpt-4.1-mini'
+param gptModelName string = 'gpt-5.4-mini'
 
 @description('Optional. Version of the GPT model to deploy.')
-param gptModelVersion string = '2025-04-14'
+param gptModelVersion string = '2026-03-17'
 
 @minValue(10)
 @description('Optional. Capacity of the GPT deployment (TPM in thousands).')
@@ -129,12 +129,6 @@ param azureAiAgentApiVersion string = '2025-05-01'
 // ============================================================================
 // Parameters — Compute
 // ============================================================================
-
-@description('Optional. Docker image tag for app deployments.')
-param imageTag string = 'latest_v2'
-
-@description('Optional. Container registry endpoint used for app images.')
-param containerRegistryEndpoint string = 'ccbcontainerreg.azurecr.io'
 
 @allowed(['F1', 'D1', 'B1', 'B2', 'B3', 'S1', 'S2', 'S3', 'P1', 'P2', 'P3', 'P1v3', 'P1v4'])
 @description('Optional. App Service Plan SKU.')
@@ -222,8 +216,6 @@ module bicepDeployment './bicep/main.bicep' = if (isBicep) {
     gptRealtimeDeploymentCapacity: gptRealtimeDeploymentCapacity
     azureOpenaiAPIVersion: azureOpenaiAPIVersion
     azureAiAgentApiVersion: azureAiAgentApiVersion
-    imageTag: imageTag
-    containerRegistryEndpoint: containerRegistryEndpoint
     appServicePlanSku: appServicePlanSku
     enableMonitoring: enableMonitoring
     deploymentScenario: deploymentScenario
@@ -251,8 +243,6 @@ module avmDeployment './avm/main.bicep' = if (isAvm) {
     gptRealtimeDeploymentCapacity: gptRealtimeDeploymentCapacity
     azureOpenaiAPIVersion: azureOpenaiAPIVersion
     azureAiAgentApiVersion: azureAiAgentApiVersion
-    imageTag: imageTag
-    containerRegistryEndpoint: containerRegistryEndpoint
     appServicePlanSku: appServicePlanSku
     enableMonitoring: enableMonitoring
     enableScalability: enableScalability
@@ -277,7 +267,6 @@ module avmDeployment './avm/main.bicep' = if (isAvm) {
 output SOLUTION_NAME string = isAvm ? avmDeployment!.outputs.SOLUTION_NAME : bicepDeployment!.outputs.SOLUTION_NAME
 output RESOURCE_GROUP_NAME string = isAvm ? avmDeployment!.outputs.RESOURCE_GROUP_NAME : bicepDeployment!.outputs.RESOURCE_GROUP_NAME
 output RESOURCE_GROUP_LOCATION string = isAvm ? avmDeployment!.outputs.RESOURCE_GROUP_LOCATION : bicepDeployment!.outputs.RESOURCE_GROUP_LOCATION
-output ACR_NAME string = isAvm ? avmDeployment!.outputs.ACR_NAME : bicepDeployment!.outputs.ACR_NAME
 output AI_SERVICE_NAME string = isAvm ? avmDeployment!.outputs.AI_SERVICE_NAME : bicepDeployment!.outputs.AI_SERVICE_NAME
 output AI_FOUNDRY_RESOURCE_ID string = isAvm ? avmDeployment!.outputs.AI_FOUNDRY_RESOURCE_ID : bicepDeployment!.outputs.AI_FOUNDRY_RESOURCE_ID
 output AI_SEARCH_SERVICE_RESOURCE_ID string = isAvm ? avmDeployment!.outputs.AI_SEARCH_SERVICE_RESOURCE_ID : bicepDeployment!.outputs.AI_SEARCH_SERVICE_RESOURCE_ID
@@ -296,7 +285,6 @@ output AZURE_AI_SEARCH_ENDPOINT string = isAvm ? avmDeployment!.outputs.AZURE_AI
 output AZURE_COSMOSDB_ACCOUNT string = isAvm ? avmDeployment!.outputs.AZURE_COSMOSDB_ACCOUNT : bicepDeployment!.outputs.AZURE_COSMOSDB_ACCOUNT
 output AZURE_COSMOSDB_CONVERSATIONS_CONTAINER string = isAvm ? avmDeployment!.outputs.AZURE_COSMOSDB_CONVERSATIONS_CONTAINER : bicepDeployment!.outputs.AZURE_COSMOSDB_CONVERSATIONS_CONTAINER
 output AZURE_COSMOSDB_DATABASE string = isAvm ? avmDeployment!.outputs.AZURE_COSMOSDB_DATABASE : bicepDeployment!.outputs.AZURE_COSMOSDB_DATABASE
-output AZURE_ENV_IMAGETAG string = isAvm ? avmDeployment!.outputs.AZURE_ENV_IMAGETAG : bicepDeployment!.outputs.AZURE_ENV_IMAGETAG
 output AZURE_FOUNDRY_ENDPOINT string = isAvm ? avmDeployment!.outputs.AZURE_FOUNDRY_ENDPOINT : bicepDeployment!.outputs.AZURE_FOUNDRY_ENDPOINT
 output AZURE_OPENAI_API_VERSION string = isAvm ? avmDeployment!.outputs.AZURE_OPENAI_API_VERSION : bicepDeployment!.outputs.AZURE_OPENAI_API_VERSION
 output AZURE_OPENAI_DEPLOYMENT_MODEL string = isAvm ? avmDeployment!.outputs.AZURE_OPENAI_DEPLOYMENT_MODEL : bicepDeployment!.outputs.AZURE_OPENAI_DEPLOYMENT_MODEL
@@ -324,4 +312,6 @@ output CHAT_API_APP_NAME string = isAvm ? avmDeployment!.outputs.CHAT_API_APP_NA
 output CHAT_WEB_APP_NAME string = isAvm ? avmDeployment!.outputs.CHAT_WEB_APP_NAME : bicepDeployment!.outputs.CHAT_WEB_APP_NAME
 output SCENARIO_API_APP_NAME string = isAvm ? avmDeployment!.outputs.SCENARIO_API_APP_NAME : bicepDeployment!.outputs.SCENARIO_API_APP_NAME
 output SCENARIO_WEB_APP_NAME string = isAvm ? avmDeployment!.outputs.SCENARIO_WEB_APP_NAME : bicepDeployment!.outputs.SCENARIO_WEB_APP_NAME
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = isAvm ? avmDeployment!.outputs.AZURE_CONTAINER_REGISTRY_ENDPOINT : bicepDeployment!.outputs.AZURE_CONTAINER_REGISTRY_ENDPOINT
+output AZURE_CONTAINER_REGISTRY_NAME string = isAvm ? avmDeployment!.outputs.AZURE_CONTAINER_REGISTRY_NAME : bicepDeployment!.outputs.AZURE_CONTAINER_REGISTRY_NAME
 output AZURE_ENV_SCENARIO string = deploymentScenario

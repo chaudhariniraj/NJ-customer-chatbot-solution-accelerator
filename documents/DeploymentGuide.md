@@ -46,7 +46,7 @@ Ensure you have access to an [Azure subscription](https://azure.microsoft.com/fr
 
 **Required Azure Services:**
 - [Azure AI Foundry](https://learn.microsoft.com/en-us/azure/ai-foundry/) - For Agent Framework orchestration and AI project management
-- [Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/) - For GPT-4.1-mini model deployments
+- [Azure OpenAI Service](https://learn.microsoft.com/en-us/azure/ai-services/openai/) - For GPT-5.4-mini model deployments
 - [Azure AI Search](https://learn.microsoft.com/en-us/azure/search/) - For hybrid search across product catalogs and policy documents
 - [Azure Cosmos DB](https://learn.microsoft.com/en-us/azure/cosmos-db/) - For storing product catalogs, orders, and chat history
 - [Azure App Service](https://learn.microsoft.com/en-us/azure/app-service/) - For hosting frontend and backend applications
@@ -62,13 +62,13 @@ Ensure you have access to an [Azure subscription](https://azure.microsoft.com/fr
 📖 **Follow:** [Quota Check Instructions](./QuotaCheck.md) to ensure sufficient capacity.
 
 **Default Quota Configuration:**
-- **gpt-4.1-mini:** 50k tokens
+- **gpt-5.4-mini:** 50k tokens
 
 **Recommended Configuration:**
-- **Minimum:** 50k tokens for Global Standard GPT-4.1-mini
+- **Minimum:** 50k tokens for Global Standard GPT-5.4-mini
 - **Optimal:** More than 50k tokens (for best performance)
 
-> **Note:** When you run `azd up`, the deployment will automatically show you regions with available quota, so this pre-check is optional but helpful for planning purposes. You can customize these settings later in [Step 3.3: Advanced Configuration](#33-advanced-configuration-optional).
+> **Note:** When you run `azd up`, the deployment will automatically show you regions with available quota, so this pre-check is optional but helpful for planning purposes. You can customize these settings later in [Step 3.4: Advanced Configuration](#34-advanced-configuration-optional).
 
 📖 **Adjust Quota:** Follow [Azure AI Model Quota Settings](./AzureGPTQuotaSettings.md) if needed.
 
@@ -196,7 +196,7 @@ Review the configuration options below. You can customize any settings that meet
 **How to switch deployment flavors:**
 ```bash
 # For AVM production without private networking
-azd env set DEPLOYMENT_FLAVOR avm
+azd env set AZURE_ENV_DEPLOYMENT_FLAVOR avm
 ```
 
 **To use production(WAF-aligned) configuration:**
@@ -212,7 +212,31 @@ Copy the contents from the production configuration file to your main parameters
 
 > **Note:** The `deploymentFlavor` parameter in `main.parameters.json` controls which modules are used. Set to `bicep` (default), `avm`, or `avm-waf` depending on your requirements. See [Parameter Customization Guide](./CustomizingAzdParameters.md) for details.
 
-### 3.2 VM Authentication (Optional - Production (AVM-WAF) Deployment Only)
+### 3.2 Choose Deployment Scenario (Optional)
+
+The accelerator ships with three industry scenarios that change the host UI, host API, seed catalog/policy data, and Foundry agent instructions. The default is **ecommerce** (Contoso Paints).
+
+| **Scenario** | **AZURE_ENV_SCENARIO** | **Description** |
+|--------------|------------------------|-----------------|
+| Ecommerce *(default)* | `ecommerce` | Contoso Paints retail host + embedded chat widget |
+| Healthcare | `healthcare` | Contoso Health services and appointments |
+| Banking | `banking` | Contoso Bank accounts and transactions |
+
+**Set the scenario before the first `azd up` on a new environment:**
+
+```shell
+# Healthcare
+azd env set AZURE_ENV_SCENARIO healthcare
+
+# Banking
+azd env set AZURE_ENV_SCENARIO banking
+```
+
+> **Important:** Use a **separate `azd` environment per scenario** (e.g., `azd env new contoso-health`) to avoid cross-contamination of Cosmos and Search indexes. Switching scenarios on an existing environment requires re-running `azd up` so the seed data, agents, and frontend image are rebuilt.
+
+📖 **Full Guide:** See [Scenario-based Deployment](./scenario-deployment-guide.md) for what changes per scenario, scenario pack layout (`scenarios/{scenario}/`), and CI examples.
+
+### 3.3 VM Authentication (Optional - Production (AVM-WAF) Deployment Only)
 
 > **Note:** This section only applies if you selected **`avm-waf`** deployment flavor in section 3.1. VMs (jumpbox) are only deployed in the WAF-aligned configuration for private networking access.
 
@@ -231,7 +255,7 @@ azd env set AZURE_ENV_VM_ADMIN_PASSWORD <your-password>
 
 > **Security Note:** Using Entra ID authentication is strongly recommended over username/password for production deployments.
 
-### 3.3 Advanced Configuration (Optional)
+### 3.4 Advanced Configuration (Optional)
 
 <details>
 <summary><b>Configurable Parameters</b></summary>
@@ -349,67 +373,104 @@ source .venv/Scripts/activate
 source .venv/bin/activate
 ```
 
-### 5.2 Initialize Data and Agents
+### 5.2 Build Container Images and Initialize Data and Agents
 
-**Step 1: Populate Product Catalogs and Search Indexes**
+**Step 1: Build and push container images**
 
-Run the data setup script to load sample product data:
+The initial deployment configures the App Services with a placeholder container. Run the ACR build script to build the real backend/frontend images inside Azure Container Registry and point both web apps at them:
+
+- **For PowerShell (Windows/Linux/macOS):**
+    ```shell
+    infra\scripts\post-provision\build_push_images.ps1
+    ```
+- **For Bash (Linux/macOS/WSL):**
+    ```bash
+    bash ./infra/scripts/post-provision/build_push_images.sh
+    ```
+
+**If you deployed from `AVM` repository:**
+
+- **For PowerShell (Windows/Linux/macOS):**
+    ```shell
+    infra\scripts\post-provision\build_push_images.ps1 -ResourceGroup "<your-resource-group-name>"
+    ```
+- **For Bash (Linux/macOS/WSL):**
+    ```bash
+    bash ./infra/scripts/post-provision/build_push_images.sh --resource-group "<your-resource-group-name>"
+    ```
+
+This script will:
+- Build four images (`chat-backend`, `chat-frontend`, `scenario-backend`, `scenario-frontend`) remotely using `az acr build` (no local Docker required)
+- Push them to your Azure Container Registry
+- Update all four App Services to run the new images and restart them
+
+> **Tip:** Pass `-ImageTag <tag>` (PowerShell) or `--image-tag <tag>` (bash) to publish a specific tag. Pass `-ShowLogs` / `--show-logs` to stream the full build output. Each run generates a fresh timestamp tag by default.
+
+**Step 2: Load Data and Create AI Foundry Agents**
+
+#### Option A — Run both stages at once (recommended)
+
+The consolidated script runs data upload **and** agent creation in sequence. It reads all required values from the `azd` environment.
+
+- **For PowerShell (Windows/Linux/macOS):**
+    ```shell
+    infra\scripts\post-provision\postprovision_data_agents.ps1
+    ```
+- **For Bash (Linux/macOS/WSL):**
+    ```bash
+    bash ./infra/scripts/post-provision/postprovision_data_agents.sh
+    ```
+
+> **Note:** If a stage fails, the wrapper prints the exact command to re-run only that failed stage.
+
+#### Option B — Run each stage individually
+
+**Stage 1: Populate Product Catalogs and Search Indexes**
 
 - **For PowerShell (Windows/Linux/macOS):**
     ```shell
     infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1
     ```
 - **For Bash (Linux/macOS/WSL):**
-     ```bash
-     bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh
-     ```
-**If you deployed using `AVM`:**
-
-- **For PowerShell (Windows/Linux/macOS):**
-    ```shell
-    infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1 -resource_group "<your-resource-group-name>"
+    ```bash
+    bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh
     ```
-- **For Bash (Linux/macOS/WSL):**
-     ```bash
-     bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh --resource-group "<your-resource-group-name>"
-     ```
 
+This stage:
+- Uploads sample product catalog data to Azure Cosmos DB
+- Creates and configures Azure AI Search indexes
+- Populates search indexes with product and policy documents
 
-This script will:
-- Upload sample product catalog data to Azure Cosmos DB
-- Create and configure Azure AI Search indexes
-- Populate search indexes with product and policy documents
-
-**Step 2: Create AI Foundry Agents**
-
-Run the agent creation script to set up specialized AI agents:
+**Stage 2: Create AI Foundry Agents**
 
 - **For PowerShell (Windows/Linux/macOS):**
     ```shell
     infra\scripts\post-provision\agent_scripts\run_create_agents_scripts.ps1
     ```
 - **For Bash (Linux/macOS/WSL):**
-     ```bash
-     bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh
-     ```  
-**If you deployed using `AVM`:**
+    ```bash
+    bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh
+    ```
 
-- **For PowerShell (Windows/Linux/macOS):**
+**If you deployed from `AVM` repository, pass the resource group explicitly:**
+
+- **For PowerShell:**
     ```shell
+    infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1 -resource_group "<your-resource-group-name>"
     infra\scripts\post-provision\agent_scripts\run_create_agents_scripts.ps1 -resourceGroup "<your-resource-group-name>"
     ```
-- **For Bash (Linux/macOS/WSL):**
-     ```bash
-     bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh --resource-group "<your-resource-group-name>"
-     ```
+- **For Bash:**
+    ```bash
+    bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh --resource-group "<your-resource-group-name>"
+    bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh --resource-group "<your-resource-group-name>"
+    ```
 
-This script creates:
-
+This stage creates:
 - **Orchestrator Agent:** Routes customer queries to appropriate specialist agents
 - **Product Lookup Agent:** Handles product search and recommendations
 - **Policy/Knowledge Agent:** Answers questions about policies and general information
 
-   > **Note**: Replace `<your-resource-group-name>` with the actual name of the resource group containing your deployed Azure resources.
+> **Note:** You can also invoke the underlying scripts directly from `infra/scripts/post-provision/data_scripts/` and `infra/scripts/post-provision/agent_scripts/` if you need to re-run one without the other.
 
 ### 5.3 Configure Authentication (Optional)
 

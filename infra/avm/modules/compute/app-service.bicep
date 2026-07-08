@@ -85,6 +85,9 @@ param privateEndpoints privateEndpointSingleServiceType[]?
 @description('Optional. Managed identities for the resource.')
 param managedIdentities object = { systemAssigned: true }
 
+@description('Optional. Whether to use managed identity credentials for Azure Container Registry.')
+param acrUseManagedIdentityCreds bool = false
+
 // ============================================================================
 // AVM Module Deployment
 // ============================================================================
@@ -106,6 +109,8 @@ module appService 'br/public:avm/res/web/site:0.23.1' = {
       healthCheckPath: !empty(healthCheckPath) ? healthCheckPath : null
       webSocketsEnabled: webSocketsEnabled
       appCommandLine: appCommandLine
+      vnetRouteAllEnabled: vnetRouteAllEnabled
+      acrUseManagedIdentityCreds: acrUseManagedIdentityCreds
     }
     e2eEncryptionEnabled: true
     configs: [
@@ -113,21 +118,6 @@ module appService 'br/public:avm/res/web/site:0.23.1' = {
         name: 'appsettings'
         properties: appSettings
         applicationInsightResourceId: !empty(applicationInsightResourceId) ? applicationInsightResourceId : null
-      }
-      {
-        name: 'logs'
-        properties: {
-          applicationLogs: { fileSystem: { level: 'Verbose' } }
-          detailedErrorMessages: { enabled: true }
-          failedRequestsTracing: { enabled: true }
-          httpLogs: { fileSystem: { enabled: true, retentionInDays: 1, retentionInMb: 35 } }
-        }
-      }
-      {
-        name:'web'
-        properties: {
-          vnetRouteAllEnabled: vnetRouteAllEnabled
-          }
       }
     ]
     outboundVnetRouting: {
@@ -149,6 +139,28 @@ module appService 'br/public:avm/res/web/site:0.23.1' = {
     ]
     diagnosticSettings: !empty(diagnosticSettings) ? diagnosticSettings : []
   }
+}
+
+// ============================================================================
+// Logs Configuration (deployed serially after appsettings)
+// Deploy logs after app settings to prevent concurrent config writes.
+// ============================================================================
+resource site 'Microsoft.Web/sites@2025-03-01' existing = {
+  name: name
+}
+
+resource logsConfig 'Microsoft.Web/sites/config@2025-03-01' = {
+  parent: site
+  name: 'logs'
+  properties: {
+    applicationLogs: { fileSystem: { level: 'Verbose' } }
+    detailedErrorMessages: { enabled: true }
+    failedRequestsTracing: { enabled: true }
+    httpLogs: { fileSystem: { enabled: true, retentionInDays: 1, retentionInMb: 35 } }
+  }
+  dependsOn: [
+    appService
+  ]
 }
 
 // ============================================================================
