@@ -26,6 +26,7 @@ apiAppName=""
 searchEndpoint=""
 azSubscriptionId=""
 original_foundry_public_access=""
+deploymentScenario="ecommerce"
 SKIP_ROLE_ASSIGNMENT=false
 
 function test_azd_installed() {
@@ -54,6 +55,10 @@ function get_values_from_azd_env() {
         resource_group=$(azd env get-value RESOURCE_GROUP_NAME 2>/dev/null)
     fi
     searchEndpoint=$(azd env get-value AZURE_AI_SEARCH_ENDPOINT 2>/dev/null)
+    scenarioRaw=$(azd env get-value AZURE_ENV_SCENARIO 2>/dev/null)
+    if [[ -n "$scenarioRaw" ]]; then
+        deploymentScenario=$(echo "$scenarioRaw" | tr '[:upper:]' '[:lower:]' | xargs)
+    fi
     
     # Validate that we got all required values
     if [[ -z "$projectEndpoint" || -z "$solutionName" || -z "$gptModelName" || -z "$aiFoundryResourceId" || -z "$apiAppName" || -z "$resource_group" || -z "$searchEndpoint" ]]; then
@@ -457,6 +462,7 @@ echo "AI Foundry Resource ID: $aiFoundryResourceId"
 echo "API App Name: $apiAppName"
 echo "Search Endpoint: $searchEndpoint"
 echo "Subscription ID: $azSubscriptionId"
+echo "Deployment Scenario: $deploymentScenario"
 echo "==============================================="
 echo ""
 
@@ -567,7 +573,7 @@ fi
 
 # Execute the Python scripts
 echo "Running Python agents creation script..."
-python_output=$(python infra/scripts/post-provision/agent_scripts/01_create_agents.py --ai_project_endpoint="$projectEndpoint" --solution_name="$solutionName" --gpt_model_name="$gptModelName" --ai_search_endpoint="$searchEndpoint")
+python_output=$(python infra/scripts/post-provision/agent_scripts/01_create_agents.py --ai_project_endpoint="$projectEndpoint" --solution_name="$solutionName" --gpt_model_name="$gptModelName" --ai_search_endpoint="$searchEndpoint" --scenario="$deploymentScenario")
 eval $(echo "$python_output" | grep -E "^(chatAgentName|productAgentName|policyAgentName)=")
 
 echo "Agents creation completed."
