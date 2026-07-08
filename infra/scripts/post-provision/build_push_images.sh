@@ -366,6 +366,7 @@ trap cleanup_on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+echo ""
 enable_acr_public_access "$ACR_NAME"
 
 # ---------------------------------------------------------------------------
