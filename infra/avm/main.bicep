@@ -108,7 +108,7 @@ param embeddingDeploymentCapacity int = 10
 param gptRealtimeModelName string = 'gpt-realtime-mini'
 
 @description('Optional. Version of the realtime model to deploy.')
-param gptRealtimeModelVersion string = '2025-10-06'
+param gptRealtimeModelVersion string = '2025-12-15'
 
 @minValue(1)
 @description('Optional. Capacity of the realtime model deployment.')
