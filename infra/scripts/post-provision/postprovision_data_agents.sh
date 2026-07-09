@@ -27,13 +27,13 @@ if [[ $upload_ok -eq 0 || $agents_ok -eq 0 ]]; then
   if [[ $upload_ok -eq 0 ]]; then
     echo "" >&2
     echo "To retry the upload data script, run the following command:" >&2
-    echo "    ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh" >&2
+    echo "    bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh" >&2
   fi
 
   if [[ $agents_ok -eq 0 ]]; then
     echo "" >&2
     echo "To retry the create agents script, run the following command:" >&2
-    echo "    ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh" >&2
+    echo "    bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh" >&2
   fi
 
   exit 1

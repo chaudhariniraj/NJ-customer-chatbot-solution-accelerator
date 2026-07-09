@@ -108,7 +108,7 @@ param embeddingDeploymentCapacity int = 10
 param gptRealtimeModelName string = 'gpt-realtime-mini'
 
 @description('Optional. Version of the realtime model to deploy.')
-param gptRealtimeModelVersion string = '2025-10-06'
+param gptRealtimeModelVersion string = '2025-12-15'
 
 @minValue(1)
 @description('Optional. Capacity of the realtime model deployment.')
@@ -717,15 +717,11 @@ module container_registry './modules/compute/container-registry.bicep' = {
     solutionName: solutionSuffix
     location: location
     tags: tags
-    sku: (enableScalability || enablePrivateNetworking) ? 'Premium' : 'Basic'
+    sku: (enableScalability || enablePrivateNetworking) ? 'Premium' : 'Standard'
     enableTelemetry: enableTelemetry
     adminUserEnabled: false
     publicNetworkAccess: enablePrivateNetworking ? 'Disabled' : 'Enabled'
-    // networkRuleBypassOptions and networkRuleSet are Premium-only; suppress them on Basic.
-    // The AVM module emits a networkRuleSet whenever defaultAction is 'Deny' (its default) with public access enabled,
-    // which ARM rejects with 'NetworkRuleNotSupported' on the Basic SKU.
-    networkRuleBypassOptions: (enableScalability || enablePrivateNetworking) ? 'AzureServices' : null
-    networkRuleSetDefaultAction: (enableScalability || enablePrivateNetworking) ? 'Deny' : 'Allow'
+    networkRuleSetDefaultAction: enablePrivateNetworking ? 'Deny' : 'Allow'
     privateEndpoints: enablePrivateNetworking
       ? [
           {
@@ -842,7 +838,7 @@ module chat_backend_app './modules/compute/app-service.bicep' = {
     applicationInsightResourceId: enableMonitoring ? app_insights!.outputs.resourceId : ''
     publicNetworkAccess: 'Enabled' // enablePrivateNetworking ? 'Disabled' : 'Enabled'
     virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : ''
-    vnetRouteAllEnabled: true
+    vnetRouteAllEnabled: enablePrivateNetworking
     imagePullTraffic: enablePrivateNetworking
     acrUseManagedIdentityCreds: true
     // privateEndpoints: enablePrivateNetworking
@@ -926,7 +922,13 @@ module chat_frontend_app './modules/compute/app-service.bicep' = {
     kind: 'app,linux,container'
     linuxFxVersion: helloWorldDefaultImageName
     serverFarmResourceId: hostingplan.outputs.resourceId
+    diagnosticSettings: monitoringDiagnosticSettings
+    applicationInsightResourceId: enableMonitoring ? app_insights!.outputs.resourceId : ''
     acrUseManagedIdentityCreds: true
+    virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : ''
+    publicNetworkAccess: 'Enabled'
+    vnetRouteAllEnabled: enablePrivateNetworking
+    imagePullTraffic: enablePrivateNetworking
     appSettings: {
       NODE_ENV: 'production'
       VITE_API_BASE_URL: chat_backend_app.outputs.appUrl // enablePrivateNetworking ? '' : chat_backend_app.outputs.appUrl
@@ -958,7 +960,7 @@ module scenario_backend_app './modules/compute/app-service.bicep' = {
     applicationInsightResourceId: enableMonitoring ? app_insights!.outputs.resourceId : ''
     publicNetworkAccess: 'Enabled' //enablePrivateNetworking ? 'Disabled' : 'Enabled'
     virtualNetworkSubnetId: enablePrivateNetworking ? virtualNetwork!.outputs.webserverfarmSubnetResourceId : ''
-    vnetRouteAllEnabled: true
+    vnetRouteAllEnabled: enablePrivateNetworking
     imagePullTraffic: enablePrivateNetworking
     acrUseManagedIdentityCreds: true
     // privateEndpoints: enablePrivateNetworking

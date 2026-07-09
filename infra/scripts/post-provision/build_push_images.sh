@@ -303,7 +303,7 @@ restore_acr_access() {
         update_args+=("--default-action" "Deny")
     fi
     if az "${update_args[@]}" >/dev/null 2>&1; then
-        echo "  \u2713 ACR settings restored (publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}, defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION})."
+        echo "  ACR settings restored (publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}, defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION})."
     else
         echo "  WARNING: Failed to restore ACR network settings for '$name'. Please restore manually."
         echo "    Expected: publicNetworkAccess=${ORIGINAL_ACR_PUBLIC_ACCESS}  defaultAction=${ORIGINAL_ACR_DEFAULT_ACTION}"
