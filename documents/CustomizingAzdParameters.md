@@ -12,17 +12,15 @@ By default this template will use the environment name as the prefix to prevent 
 | `AZURE_LOCATION`                       | string  | `<User selects during deployment>` | Sets the Azure region for resource deployment.                                |
 | `AZURE_ENV_NAME`                       | string  | `chatbot`                  | Sets the environment name prefix for all Azure resources.                     |                                      |
 | `AZURE_ENV_AI_SERVICE_LOCATION`                       | string  | `<User selects during deployment>` | Sets the Azure region for AI service resource deployment.  |
-| `AZURE_ENV_MODEL_DEPLOYMENT_TYPE`      | string  | `Standard`                 | Defines the model deployment type (allowed: `Standard`, `GlobalStandard`).    |
+| `AZURE_ENV_MODEL_DEPLOYMENT_TYPE`      | string  | `GlobalStandard`           | Defines the model deployment type (allowed: `Standard`, `GlobalStandard`).    |
 | `AZURE_ENV_GPT_MODEL_NAME`                 | string  | `gpt-5.4-mini`                   | Specifies the GPT model name (e.g., `gpt-5.4-mini`).                    |
 | `AZURE_ENV_GPT_MODEL_VERSION`                 | string  | `2026-03-17`                   | Set the Azure model version.                    |
 | `AZURE_ENV_GPT_MODEL_CAPACITY`             | integer | `10`                         | Sets the GPT model capacity (based on what's available in your subscription). |
 | `AZURE_ENV_EMBEDDING_DEPLOYMENT_CAPACITY` | integer | `10`                      | Sets the embedding model deployment capacity (minimum: 10).                   |
-| `AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT`    | string  | `ccbcontainerreg.azurecr.io` | Sets the Azure Container Registry login server/endpoint (for example: `ccbcontainerreg.azurecr.io`). |
-| `AZURE_ENV_ACR_NAME`       | string  | *(derived)*   | Short ACR name passed to **`az acr build --registry`** in **`infra/scripts/build_*_acr`** scripts; optional if the endpoint is set (name is parsed from **`AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT`**). |
-| `AZURE_ENV_IMAGE_TAG`      | string  | `latest_v3`   | Tag used for both App Service container pins and **`az acr build`** scripts (`latest`, `dev`, `demo`, `latest_v3`, or a SHA/time stamp). |
+| `AZURE_ENV_GPT_REALTIME_DEPLOYMENT_CAPACITY` | integer | `1`                    | Sets the realtime GPT model deployment capacity (minimum: 1). |
+| `AZURE_ENV_ENABLE_TELEMETRY` | boolean | `true` | Enables/disables usage telemetry for AVM modules. |
+| `AZURE_ENV_IMAGETAG`      | string  | `latest_v3`   | Image tag applied to the container images built by **`build_push_images`** (falls back to a UTC timestamp if unset). |
 | `AZURE_ENV_SCENARIO`       | string  | `ecommerce`   | Deployment scenario: `ecommerce` (default), `healthcare`, or `banking`. See [scenario-deployment-guide.md](./scenario-deployment-guide.md). |
-| `AZURE_ENV_FRONTEND_IMAGE_REPO` | string | *(per app)* | Overrides Bicep **`frontendImageRepository`**: chat default **`ccsa-chat-frontend`**, scenario host default **`scenario-frontend`**. |
-| `AZURE_ENV_BACKEND_IMAGE_REPO` | string | *(per app)* | Overrides Bicep **`backendImageRepository`**: chat default **`ccsa-chat-backend`**, scenario host default **`scenario-backend`**. |
 | `AZURE_ENV_EXISTING_LOG_ANALYTICS_WORKSPACE_RID` | string  | Guide to get your [Existing Workspace Resource ID](./ReuseLogAnalytics.md)  | Reuses an existing Log Analytics Workspace instead of creating a new one.     |
 | `AZURE_EXISTING_AIPROJECT_RESOURCE_ID`    | string  | Guide to get your existing [Existing Foundry Project Resource ID](./ReuseFoundryProject.md)           | Reuses an existing AIFoundry and AIFoundryProject instead of creating a new one.  |
 | `AZURE_ENV_VM_ADMIN_USERNAME`          | string  | `testvmuser`               | **Optional (Entra ID Auth is default):** The admin username for the VM. Only set if using traditional username/password auth instead of Microsoft Entra ID authentication (not recommended). |

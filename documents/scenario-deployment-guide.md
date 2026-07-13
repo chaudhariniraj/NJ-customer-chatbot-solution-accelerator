@@ -5,8 +5,8 @@ Deploy one scenario per azd environment. The default scenario is **ecommerce** (
 ## Quick start
 
 ```powershell
-# Retail (default)
-azd env new contoso-retail
+# Ecommerce (default)
+azd env new contoso-ecommerce
 azd up
 
 # Healthcare
@@ -58,10 +58,10 @@ Each pack contains:
 
 ## Infrastructure
 
-- `AZURE_ENV_SCENARIO` flows through [`infra_basic/main.parameters.json`](../infra_basic/main.parameters.json) → Bicep `deploymentScenario`
+- `AZURE_ENV_SCENARIO` flows through [`infra/main.parameters.json`](../infra/main.parameters.json) → Bicep `deploymentScenario`
 - App Settings: `DEPLOYMENT_SCENARIO`, `VITE_SCENARIO`, `CHAT_WELCOME_*`, Search index names, `FOUNDRY_CATALOG_TOOL_NAME`, `FOUNDRY_POLICY_TOOL_NAME`
 - Foundry agents and chat runtime use matching tool names from `scenarios/{scenario}/manifest.json`
-- Ecommerce frontend Docker build receives `VITE_SCENARIO` build arg via [`infra/scripts/post-provision/cloud_build_acr.ps1`](../infra/scripts/post-provision/cloud_build_acr.ps1)
+- Scenario host frontend picks up the scenario at runtime via the `VITE_SCENARIO` / `DEPLOYMENT_SCENARIO` App Settings (see [`scenario-app/frontend/startup.sh`](../scenario-app/frontend/startup.sh))
 
 ## Switching scenarios
 
@@ -69,7 +69,7 @@ Use a **separate azd environment** per scenario. Reusing an environment requires
 
 1. `azd env set AZURE_ENV_SCENARIO <scenario>`
 2. Re-run postprovision data/agent scripts or full `azd up`
-3. Rebuild ecommerce frontend image so `VITE_SCENARIO` is baked in
+3. Rebuild the scenario host frontend image so `VITE_SCENARIO` is baked in
 
 ## Sample chat prompts
 
@@ -77,12 +77,4 @@ Use a **separate azd environment** per scenario. Reusing an environment requires
 
 **Healthcare:** "What are visiting hours?" / "Tell me about primary care services"
 
-## CI
-
-GitHub Actions workflows can set the scenario before deploy:
-
-```yaml
-- run: azd env set AZURE_ENV_SCENARIO healthcare
-```
-
-Use separate azd environment names per scenario in pipeline jobs to avoid cross-contamination of Cosmos and Search indexes.
+**Banking:** "What savings options are available?" / "Show me the credit cards you offer"

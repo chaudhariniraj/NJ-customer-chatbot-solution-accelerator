@@ -311,7 +311,7 @@ azd auth login --tenant-id <tenant-id>
    > 3. Under the **Overview** section, locate the **Tenant ID** field. Copy the value displayed.
 
 ### 4.2 Start Deployment
-**NOTE:** If you are running the latest azd version (version 1.23.9), please run the following command. 
+**NOTE:** If you are running azd version **1.23.9 or above**, please run the following command first to disable the built-in preflight check:
 ```bash 
 azd config set provision.preflight off
 ```
@@ -323,23 +323,27 @@ azd up
 **During deployment, you'll be prompted for:**
 1. **Environment name** (e.g., "chatbot") - Must be 3-16 characters long, alphanumeric only
 2. **Azure subscription** selection
-3. **Azure AI Foundry deployment region** - Select a region with available o3 model quota for AI operations
+3. **Azure AI Foundry deployment region** - Select a region with available `gpt-5.4-mini` model quota for AI operations
 4. **Primary location** - Select the region where your infrastructure resources will be deployed
 5. **Resource group** selection (create new or use existing)
+
+> **Note:** A scenario preflight validation runs automatically before provisioning (as an `azd` preprovision hook) to verify the selected `AZURE_ENV_SCENARIO`. See [Scenario-based Deployment](./scenario-deployment-guide.md) for details.
 
 **Expected Duration:** 4-6 minutes for default configuration
 
 **⚠️ Deployment Issues:** If you encounter errors or timeouts, try a different region as there may be capacity constraints. For detailed error solutions, see our [Troubleshooting Guide](./TroubleShootingSteps.md).
 
-### 4.3 Get Application URL
+### 4.3 Get Application URLs
 
-After successful deployment:
+This solution deploys **two** web apps — the embeddable chat host (`chat`) and the scenario host UI (`scenario`). Both URLs are printed at the end of a successful `azd up` (via the postdeploy hook) as `CHAT_WEB_APP_URL` and `SCENARIO_WEB_APP_URL`.
+
+If you missed the terminal output, you can also find them in the Azure Portal:
 1. Open [Azure Portal](https://portal.azure.com/)
 2. Navigate to your resource group
-3. Find the App Service with "app" in the name
-4. Copy the **Application URI**
+3. Look for the two App Services named `app-chat-<suffix>` and `app-scenario-<suffix>`
+4. Copy the **Default domain** / **Application URI** from each
 
-⚠️ **Important:** Complete [Post-Deployment Steps](#step-5-post-deployment-configuration) before accessing the application.
+⚠️ **Important:** Complete [Post-Deployment Steps](#step-5-post-deployment-configuration) before accessing the applications.
 
 ## Step 5: Post-Deployment Configuration
 
@@ -386,17 +390,6 @@ The initial deployment configures the App Services with a placeholder container.
 - **For Bash (Linux/macOS/WSL):**
     ```bash
     bash ./infra/scripts/post-provision/build_push_images.sh
-    ```
-
-**If you deployed from `AVM` repository:**
-
-- **For PowerShell (Windows/Linux/macOS):**
-    ```shell
-    infra\scripts\post-provision\build_push_images.ps1 -ResourceGroup "<your-resource-group-name>"
-    ```
-- **For Bash (Linux/macOS/WSL):**
-    ```bash
-    bash ./infra/scripts/post-provision/build_push_images.sh --resource-group "<your-resource-group-name>"
     ```
 
 This script will:
@@ -450,19 +443,6 @@ This stage:
 - **For Bash (Linux/macOS/WSL):**
     ```bash
     bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh
-    ```
-
-**If you deployed from `AVM` repository, pass the resource group explicitly:**
-
-- **For PowerShell:**
-    ```shell
-    infra\scripts\post-provision\data_scripts\run_upload_data_scripts.ps1 -resource_group "<your-resource-group-name>"
-    infra\scripts\post-provision\agent_scripts\run_create_agents_scripts.ps1 -resourceGroup "<your-resource-group-name>"
-    ```
-- **For Bash:**
-    ```bash
-    bash ./infra/scripts/post-provision/data_scripts/run_upload_data_scripts.sh --resource-group "<your-resource-group-name>"
-    bash ./infra/scripts/post-provision/agent_scripts/run_create_agents_scripts.sh --resource-group "<your-resource-group-name>"
     ```
 
 This stage creates:
@@ -619,32 +599,3 @@ Now that your deployment is complete and tested, explore these resources to enha
 - 🐛 **Issues:** Check [Troubleshooting Guide](./TroubleShootingSteps.md)
 - 💬 **Support:** Review [Support Guidelines](../SUPPORT.md)
 - 🔧 **Development:** See [Contributing Guide](../CONTRIBUTING.md)
-
----
-
-## Advanced: Deploy Local Changes
-
-If you've made local modifications to the code and want to deploy them to Azure, follow these steps to swap the configuration files:
-
-> **Note:** To set up and run the application locally for development, see the [Local Development Setup Guide](./LocalDevelopmentSetup.md).
-
-### Step 1: Rename Azure Configuration Files
-
-**In the root directory:**
-1. Rename `azure.yaml` to `azure_custom2.yaml`
-2. Rename `azure_custom.yaml` to `azure.yaml`
-
-### Step 2: Rename Infrastructure Files
-
-**In the `infra` directory:**
-1. Rename `main.bicep` to `main_custom2.bicep`
-2. Rename `main_custom.bicep` to `main.bicep`
-
-### Step 3: Deploy Changes
-
-Run the deployment command:
-```shell
-azd up
-```
-
-> **Note:** These custom files are configured to deploy your local code changes instead of pulling from the GitHub repository.
